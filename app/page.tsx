@@ -1,70 +1,62 @@
-import { PlusCircle, User, Tag } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+// ※もし第2段階でlucide-reactのアイコンを使っていたら、ここに追加でimportしてください
 
-export default function Home() {
-  // 第3段階でSupabaseから取得するデータの「ダミー」です
-  const dummyPosts = [
-    {
-      id: 1,
-      date: '2026.05.16',
-      imageUrl: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?q=80&w=600&auto=format&fit=crop', // サンプル画像（プレゼント）
-      comment: '22歳の誕生日。Rifaのブラシ。',
-      tags: [{ name: 'りんりん', type: 'people' }, { name: '誕生日プレゼント', type: 'event' }]
-    },
-    {
-      id: 2,
-      date: '2026.06.16',
-      imageUrl: 'https://images.unsplash.com/photo-1557142046-c704a3adf364?q=80&w=600&auto=format&fit=crop', // サンプル画像（ホテル）
-      comment: '横浜のホテルでヌンチャした。',
-      tags: [{ name: 'りんりん', type: 'people' }, { name: 'アフタヌーンティー', type: 'event' }]
-    }
-  ];
+export default async function Home() {
+  // ① Supabaseのpostsテーブルから、作成日(created_at)の新しい順にすべてのデータを取得
+  const { data: posts, error } = await supabase
+    .from('posts')
+    .select('*')
+    .order('created_at', { ascending: false });
 
+  // 万が一エラーが起きた場合の画面
+  if (error) {
+    console.error('データ取得エラー:', error);
+    return <div className="p-8 text-red-500">データの読み込みに失敗しました。</div>;
+  }
+
+  // ② 取得したデータを画面に流し込む
   return (
-    <main className="min-h-screen bg-[#fdfbf7] p-4 md:p-8 font-sans text-gray-800">
-      {/* ヘッダーエリア */}
-      <div className="max-w-4xl mx-auto flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold tracking-widest border-b-4 border-orange-500 pb-1">チェキ</h1>
-        <button className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-full hover:bg-gray-700 transition">
-          <PlusCircle size={20} />
-          <span className="hidden md:inline">新しい思い出を登録</span>
-        </button>
-      </div>
-
-      {/* 絞り込み（タグ）エリア */}
-      <div className="max-w-4xl mx-auto mb-8 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <User size={18} className="text-gray-500" />
-          <button className="bg-white border border-gray-300 px-3 py-1 rounded-full text-sm shadow-sm hover:bg-gray-50"># りんりん</button>
+    <main className="min-h-screen bg-gray-100 p-8">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 tracking-wider">My Cheki App</h1>
+          {/* ※ここのボタンは第5段階で動かします */}
+          <button className="bg-gray-800 text-white px-4 py-2 rounded-full shadow-md hover:bg-gray-700 transition">
+            ＋ 新しい思い出
+          </button>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Tag size={18} className="text-gray-500" />
-          <button className="bg-white border border-gray-300 px-3 py-1 rounded-full text-sm shadow-sm hover:bg-gray-50"># 誕生日プレゼント</button>
-          <button className="bg-white border border-gray-300 px-3 py-1 rounded-full text-sm shadow-sm hover:bg-gray-50"># アフタヌーンティー</button>
-        </div>
-      </div>
 
-      {/* ギャラリー（チェキ風カード）エリア */}
-      <div className="max-w-4xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
-        {dummyPosts.map((post) => (
-          <div key={post.id} className="bg-white p-4 pb-16 shadow-md hover:shadow-lg transition-shadow duration-300 border border-gray-100">
-            {/* 写真部分 */}
-            <div className="aspect-square w-full overflow-hidden bg-gray-200 mb-4">
-              <img src={post.imageUrl} alt="思い出の写真" className="w-full h-full object-cover" />
-            </div>
-            {/* テキスト部分 */}
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 font-mono">{post.date}</p>
-              <div className="flex flex-wrap gap-2">
-                {post.tags.map((tag, idx) => (
-                  <span key={idx} className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
-                    # {tag.name}
-                  </span>
-                ))}
+        {/* チェキカードを並べるグリッド */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+          {posts?.map((post) => (
+            // チェキ風カードのUI（少し傾けるデザイン）
+            <div 
+              key={post.id} 
+              className="bg-white p-4 pb-16 shadow-xl transform odd:-rotate-2 even:rotate-2 hover:rotate-0 hover:scale-105 transition-all duration-300"
+            >
+              {/* 画像部分（アスペクト比 3:4） */}
+              <div className="aspect-[3/4] bg-gray-200 mb-4 overflow-hidden rounded-sm">
+                <img 
+                  src={post.image_url} 
+                  alt="チェキ画像" 
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <p className="text-sm mt-2">{post.comment}</p>
+              
+              {/* コメント部分（手書き風フォントなどが似合います） */}
+              <div className="text-gray-700 font-medium text-lg leading-relaxed">
+                {post.comment}
+              </div>
             </div>
+          ))}
+        </div>
+
+        {/* データが1件もない場合のメッセージ */}
+        {posts?.length === 0 && (
+          <div className="text-center text-gray-500 mt-20">
+            まだ思い出がありません。「＋ 新しい思い出」から登録してみましょう！
           </div>
-        ))}
+        )}
       </div>
     </main>
   );
