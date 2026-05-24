@@ -104,9 +104,11 @@ export default function Home() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
+        // ①写真の権限を要求
         scopes: 'https://www.googleapis.com/auth/photoslibrary.readonly',
-        // ★ 追加：毎回必ず「許可画面（チェックボックス）」を強制的に表示させる魔法
+        // ②「絶対に同意画面を出す」「強力な権限をもらう」という魔法のパラメータ
         queryParams: {
+          access_type: 'offline',
           prompt: 'consent',
         },
         redirectTo: `${window.location.origin}/` 
