@@ -84,7 +84,9 @@ export default function Home() {
   }, []);
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/` } });
+    await supabase.auth.signInWithOAuth({ provider: 'google', options: { 
+      scopes: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+      redirectTo: `${window.location.origin}/` } });
   };
 
   const handleDelete = async (post: Post) => {
