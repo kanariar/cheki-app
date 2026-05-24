@@ -53,15 +53,15 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
       setLoadingPhotos(true);
       setShowGooglePicker(true);
       
-      const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems?pageSize=24', {
+      // ★ 変更：直接Googleを叩かず、新しく作った自作の中継APIを経由させる
+      const res = await fetch('/api/google-photos', {
         headers: { 'Authorization': `Bearer ${googleToken}` }
       });
       const data = await res.json();
 
-      // ★ 追加：もしGoogleのサーバーがエラーを返していたら、その理由を画面に出す
       if (!res.ok) {
         console.error("Google API Error:", data);
-        alert(`Google API エラー: ${data.error?.message || '権限がありません'}\n※ログアウトして、ログイン時の許可チェックボックスにチェックを入れたか確認してください。`);
+        alert(`Google API エラー: ${data.error?.message || '権限がありません'}\n※ログアウトして、ログイン時の許可画面でチェックを入れたか確認してください。`);
         setGooglePhotos([]);
         return;
       }
