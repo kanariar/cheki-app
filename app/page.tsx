@@ -264,7 +264,7 @@ export default function Home() {
                 <img src={post.image_url} className="w-full h-full object-cover" style={{ objectPosition: `${post.image_position}% center` }} />
               </div>
               <div className="text-gray-800 font-medium text-xs sm:text-lg leading-relaxed mb-2 sm:mb-3 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">{post.comment}</div>
-              <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-5 text-gray-400 font-mono text-[9px] sm:text-sm tracking-tighter italic font-bold">{post.date ? post.date.replace(/-/g, '.') : '----.--.--'}</div>
+              <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-5 text-gray-800 font-mono text-[9px] sm:text-sm tracking-tighter italic font-bold">{post.date ? post.date.replace(/-/g, '.') : '----.--.--'}</div>
               <div className="flex flex-wrap gap-0.5 sm:gap-1 absolute bottom-2 left-2 sm:bottom-4 sm:left-4 max-w-[85%] sm:max-w-[70%]">
                 {post.post_tags?.map((pt, i) => pt.tags && (
                   <span key={i} className={`text-[8px] sm:text-[10px] font-bold px-1 py-0.5 sm:px-1.5 rounded-none border shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-green-50 text-green-600 border-green-100'}`}>#{pt.tags.name}</span>

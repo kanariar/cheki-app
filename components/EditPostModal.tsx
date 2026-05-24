@@ -214,7 +214,7 @@ export default function EditPostModal({ isOpen, onClose, onSuccess, tags, post }
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-none focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white" />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-none focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white text-gray-900" />
             </div>
           </div>
 
@@ -228,12 +228,12 @@ export default function EditPostModal({ isOpen, onClose, onSuccess, tags, post }
                 })}
                 {addedPeopleNames.map(name => <span key={name} className="inline-flex items-center bg-cyan-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-none shadow-sm">#{name} (新) <button onClick={() => setAddedPeopleNames(prev => prev.filter(n => n !== name))} className="ml-1 text-cyan-200">×</button></span>)}
               </div>
-              <input type="text" placeholder="名前を検索、または入力して追加..." value={peopleInput} onFocus={() => setShowPeopleList(true)} onChange={(e) => setPeopleInput(e.target.value)} className="w-full border border-gray-300 p-2.5 rounded-none text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+              <input type="text" placeholder="名前を検索、または入力して追加..." value={peopleInput} onFocus={() => setShowPeopleList(true)} onChange={(e) => setPeopleInput(e.target.value)} className="w-full border border-gray-300 p-2.5 rounded-none text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none" />
               {showPeopleList && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                   {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (
                     <button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center">
-                      <span>#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}
+                      <span className="text-gray-900">#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}
                     </button>
                   ))}
                   {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === peopleInput.trim()) && (
@@ -257,7 +257,7 @@ export default function EditPostModal({ isOpen, onClose, onSuccess, tags, post }
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                   {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (
                     <button key={t.id} onClick={() => toggleSelection(t.id, 'event')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center">
-                      <span>#{t.name}</span>{selectedEventIds.includes(t.id) && <span className="text-green-600 text-xs">✓</span>}
+                      <span className="text-gray-900">#{t.name}</span>{selectedEventIds.includes(t.id) && <span className="text-green-600 text-xs">✓</span>}
                     </button>
                   ))}
                   {eventInput.trim() && !tags.some(t => t.type === 'event' && t.name === eventInput.trim()) && (
@@ -269,7 +269,7 @@ export default function EditPostModal({ isOpen, onClose, onSuccess, tags, post }
 
             <div className="flex flex-col gap-1.5 flex-1">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comment</label>
-              <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-none text-sm focus:ring-2 focus:ring-inset focus:ring-slate-800 bg-white flex-1 min-h-[100px]" />
+              <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-none text-sm focus:ring-2 focus:ring-inset focus:ring-slate-800 text-gray-900 bg-white flex-1 min-h-[100px]" />
             </div>
           </div>
         </div>

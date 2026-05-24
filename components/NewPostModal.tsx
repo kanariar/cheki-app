@@ -270,7 +270,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-none focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white" />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-none focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white text-gray-900" />
                 </div>
               </div>
 
@@ -284,7 +284,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                   <input type="text" placeholder="名前を検索、または入力して追加..." value={peopleInput} onFocus={() => setShowPeopleList(true)} onChange={(e) => setPeopleInput(e.target.value)} className="w-full border border-gray-300 p-2.5 rounded-none text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                   {showPeopleList && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
-                      {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span>#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}</button>))}
+                      {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span className="text-gray-900">#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}</button>))}
                       {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === peopleInput.trim()) && (<button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{peopleInput}" を新しく追加する</button>)}
                     </div>
                   )}
@@ -299,7 +299,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                   <input type="text" placeholder="イベントを検索、または入力して追加..." value={eventInput} onFocus={() => setShowEventList(true)} onChange={(e) => setEventInput(e.target.value)} className="w-full border border-gray-300 p-2.5 rounded-none text-sm focus:ring-2 focus:ring-green-500 focus:outline-none" />
                   {showEventList && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
-                      {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'event')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span>#{t.name}</span>{selectedEventIds.includes(t.id) && <span className="text-green-600 text-xs">✓</span>}</button>))}
+                      {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'event')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span className="text-gray-900">#{t.name}</span>{selectedEventIds.includes(t.id) && <span className="text-green-600 text-xs">✓</span>}</button>))}
                       {eventInput.trim() && !tags.some(t => t.type === 'event' && t.name === eventInput.trim()) && (<button onClick={() => createNewTag(eventInput, 'event')} className="w-full text-left px-4 py-3 text-sm text-green-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{eventInput}" を新しく追加する</button>)}
                     </div>
                   )}
