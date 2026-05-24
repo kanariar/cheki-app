@@ -105,6 +105,10 @@ export default function Home() {
       provider: 'google',
       options: { 
         scopes: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+        // ★ 追加：毎回必ず「許可画面（チェックボックス）」を強制的に表示させる魔法
+        queryParams: {
+          prompt: 'consent',
+        },
         redirectTo: `${window.location.origin}/` 
       }
     });

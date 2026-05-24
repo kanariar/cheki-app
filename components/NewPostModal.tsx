@@ -53,14 +53,22 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
       setLoadingPhotos(true);
       setShowGooglePicker(true);
       
-      // Google Photos Library APIを叩いて最新24枚を取得
       const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems?pageSize=24', {
         headers: { 'Authorization': `Bearer ${googleToken}` }
       });
       const data = await res.json();
+
+      // ★ 追加：もしGoogleのサーバーがエラーを返していたら、その理由を画面に出す
+      if (!res.ok) {
+        console.error("Google API Error:", data);
+        alert(`Google API エラー: ${data.error?.message || '権限がありません'}\n※ログアウトして、ログイン時の許可チェックボックスにチェックを入れたか確認してください。`);
+        setGooglePhotos([]);
+        return;
+      }
+
       setGooglePhotos(data.mediaItems || []);
-    } catch (e) {
-      alert("写真の取得に失敗しました。");
+    } catch (e: any) {
+      alert(`通信エラー: ${e.message}`);
     } finally {
       setLoadingPhotos(false);
     }
