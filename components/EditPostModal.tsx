@@ -252,7 +252,7 @@ export default function EditPostModal({ isOpen, onClose, onSuccess, tags, post }
                 })}
                 {addedEventNames.map(name => <span key={name} className="inline-flex items-center bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-none shadow-sm">#{name} (新) <button onClick={() => setAddedEventNames(prev => prev.filter(n => n !== name))} className="ml-1 text-emerald-200">×</button></span>)}
               </div>
-              <input type="text" placeholder="イベントを検索、または入力して追加..." value={eventInput} onFocus={() => setShowEventList(true)} onChange={(e) => setEventInput(e.target.value)} className="w-full border border-gray-300 p-2.5 rounded-none text-sm focus:ring-2 focus:ring-green-500 focus:outline-none" />
+              <input type="text" placeholder="イベントを検索、または入力して追加..." value={eventInput} onFocus={() => setShowEventList(true)} onChange={(e) => setEventInput(e.target.value)} className="w-full border border-gray-300 p-2.5 rounded-none text-sm text-gray-900 focus:ring-2 focus:ring-green-500 focus:outline-none" />
               {showEventList && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                   {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (
