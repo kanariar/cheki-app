@@ -121,7 +121,6 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
             setPreviewUrl(URL.createObjectURL(googleFile));
             setImagePosition(50);
             
-            // ★ 修正：新しいAPIのルールに合わせて日付の取得方法を変更
             if (photo.createTime) {
                 setDate(photo.createTime.split('T')[0]);
             }
@@ -279,7 +278,8 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                   {showPeopleList && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                       {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span>#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}</button>))}
-                      {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === input.trim()) && (<button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{peopleInput}" を新しく追加する</button>)}
+                      {/* ★ タイポ修正箇所（input → peopleInput） */}
+                      {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === peopleInput.trim()) && (<button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{peopleInput}" を新しく追加する</button>)}
                     </div>
                   )}
                 </div>
