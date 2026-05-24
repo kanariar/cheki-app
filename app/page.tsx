@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import NewPostModal from '../components/NewPostModal';
+import EditPostModal from '../components/EditPostModal'; // ★ 追加
 
 interface Post { 
   id: string; 
@@ -15,9 +16,6 @@ interface Post {
 }
 interface Tag { id: string; name: string; type: string; }
 
-// ==========================================
-// ★ あなたのGoogleアカウント
-// ==========================================
 const ALLOWED_ADMIN_EMAIL = "yuno.crescent25@gmail.com"; 
 
 export default function Home() {
@@ -35,6 +33,9 @@ export default function Home() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
+
+  // ★ 編集モーダルの開閉状態
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -71,28 +72,20 @@ export default function Home() {
         setTags([]);
       }
     };
-
     supabase.auth.getSession().then(({ data: { session } }) => { 
       setSession(session);
       checkSecurityGuard(session);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
       setSession(session);
       checkSecurityGuard(session);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/` }
-    });
+    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/` } });
   };
-
-  const signOut = async () => { await supabase.auth.signOut(); };
 
   const handleDelete = async (post: Post) => {
     if (!confirm("この思い出を完全に削除してもよろしいですか？")) return;
@@ -100,13 +93,10 @@ export default function Home() {
       await supabase.from('post_tags').delete().eq('post_id', post.id);
       await supabase.from('posts').delete().eq('id', post.id);
       const fileName = post.image_url.split('/').pop();
-      if (fileName) {
-        await supabase.storage.from('photos').remove([fileName]);
-      }
+      if (fileName) await supabase.storage.from('photos').remove([fileName]);
       setPosts(posts.filter(p => p.id !== post.id));
       setSelectedIndex(null);
     } catch (error) {
-      console.error(error);
       alert("削除に失敗しました。");
     }
   };
@@ -125,10 +115,7 @@ export default function Home() {
   const yearSet = new Set<string>();
   const yearMonthSet = new Set<string>();
   posts.forEach(post => {
-    if (post.date) {
-      yearSet.add(post.date.substring(0, 4));
-      yearMonthSet.add(post.date.substring(0, 7));
-    }
+    if (post.date) { yearSet.add(post.date.substring(0, 4)); yearMonthSet.add(post.date.substring(0, 7)); }
   });
   Array.from(yearSet).sort().reverse().forEach(year => {
     timeOptions.push({ label: `${year}年 (すべて)`, value: year });
@@ -144,25 +131,23 @@ export default function Home() {
     return true;
   });
 
-  const handleResetFilter = () => {
-    setSelectedPeopleId(""); setSelectedEventId(""); setSelectedTime("");
-  };
+  const handleResetFilter = () => { setSelectedPeopleId(""); setSelectedEventId(""); setSelectedTime(""); };
 
   useEffect(() => {
-    document.body.style.overflow = selectedIndex !== null ? 'hidden' : '';
+    document.body.style.overflow = selectedIndex !== null || isEditModalOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
-  }, [selectedIndex]);
+  }, [selectedIndex, isEditModalOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (selectedIndex === null) return;
+      if (selectedIndex === null || isEditModalOpen) return;
       if (e.key === 'Escape') handleClose();
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === 'ArrowRight') handleNext();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIndex, filteredPosts.length]);
+  }, [selectedIndex, filteredPosts.length, isEditModalOpen]);
 
   if (loading && session) return <div className="min-h-screen bg-slate-900 p-8 text-center text-slate-400 font-medium">読み込み中...</div>;
 
@@ -235,7 +220,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* ギャラリー（Lightbox） */}
         {selectedIndex !== null && filteredPosts[selectedIndex] && (
           <div 
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; }}
@@ -250,31 +234,27 @@ export default function Home() {
           >
             <img src={filteredPosts[selectedIndex].image_url} className="max-w-full max-h-[100dvh] object-contain pointer-events-none" />
             
-            {/* ★ 改修：コントロールエリアを透過SVGアイコンに変更！ */}
             <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex gap-2 sm:gap-3 z-50">
-              {/* 削除ボタン（SVG） */}
+              {/* ★ 編集ボタン（SVG） */}
               <button 
-                onClick={(e) => { e.stopPropagation(); handleDelete(filteredPosts[selectedIndex]); }} 
-                title="削除"
-                className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-red-500 transition-all duration-300 rounded-none backdrop-blur-sm"
+                onClick={(e) => { e.stopPropagation(); setIsEditModalOpen(true); }} 
+                title="編集"
+                className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-blue-400 transition-all duration-300 rounded-none backdrop-blur-sm"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
                 </svg>
               </button>
-              {/* 閉じるボタン（SVG） */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleClose(); }} 
-                title="閉じる"
-                className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-white transition-all duration-300 rounded-none backdrop-blur-sm"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
+
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(filteredPosts[selectedIndex]); }} title="削除" className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-red-500 transition-all duration-300 rounded-none backdrop-blur-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+              </button>
+              
+              <button onClick={(e) => { e.stopPropagation(); handleClose(); }} title="閉じる" className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-white transition-all duration-300 rounded-none backdrop-blur-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
-            {/* 情報オーバーレイ */}
             <div onClick={(e) => e.stopPropagation()} className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-6 sm:p-10 pt-20">
               <div className="max-w-3xl mx-auto flex flex-col gap-3">
                 <p className="text-white text-sm sm:text-lg font-medium leading-relaxed whitespace-pre-wrap">{filteredPosts[selectedIndex].comment}</p>
@@ -290,6 +270,16 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* ★ 編集用モーダル */}
+        <EditPostModal 
+          isOpen={isEditModalOpen} 
+          onClose={() => setIsEditModalOpen(false)} 
+          onSuccess={() => { setIsEditModalOpen(false); fetchData(); }} 
+          tags={tags} 
+          post={selectedIndex !== null ? filteredPosts[selectedIndex] : null} 
+        />
+
       </div>
     </main>
   );
