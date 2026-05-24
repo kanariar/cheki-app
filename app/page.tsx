@@ -104,9 +104,8 @@ export default function Home() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
-        // ①写真の権限を要求
-        scopes: 'https://www.googleapis.com/auth/photoslibrary.readonly',
-        // ②「絶対に同意画面を出す」「強力な権限をもらう」という魔法のパラメータ
+        // ★ 変更：廃止されたURLから、新しいPicker APIのURLに変更！
+        scopes: 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly',
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
