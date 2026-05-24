@@ -23,24 +23,19 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 選択済みのタグ
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
-  // 新規作成予定のタグ名
   const [addedPeopleNames, setAddedPeopleNames] = useState<string[]>([]);
   const [addedEventNames, setAddedEventNames] = useState<string[]>([]);
 
-  // 入力中のテキスト
   const [peopleInput, setPeopleInput] = useState("");
   const [eventInput, setEventInput] = useState("");
-  // 候補リストの表示管理
   const [showPeopleList, setShowPeopleList] = useState(false);
   const [showEventList, setShowEventList] = useState(false);
 
   const peopleRef = useRef<HTMLDivElement>(null);
   const eventRef = useRef<HTMLDivElement>(null);
 
-  // 外側をクリックしたらリストを閉じる
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (peopleRef.current && !peopleRef.current.contains(e.target as Node)) setShowPeopleList(false);
@@ -113,12 +108,10 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
       if (newPost) {
         const finalTagIds = [...selectedPeopleIds, ...selectedEventIds];
         
-        // 人物新規保存
         for (const name of addedPeopleNames) {
           const { data: tagData } = await supabase.from('tags').upsert({ name, type: 'people' }, { onConflict: 'name' }).select().single();
           if (tagData) finalTagIds.push(tagData.id);
         }
-        // イベント新規保存
         for (const name of addedEventNames) {
           const { data: tagData } = await supabase.from('tags').upsert({ name, type: 'event' }, { onConflict: 'name' }).select().single();
           if (tagData) finalTagIds.push(tagData.id);
@@ -137,7 +130,6 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
     }
   };
 
-  // --- タグ選択ロジック ---
   const toggleSelection = (id: string, type: 'people' | 'event') => {
     if (type === 'people') {
       setSelectedPeopleIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -166,20 +158,19 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
 
   return (
     <>
-      <button onClick={() => setIsOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-full shadow-md hover:bg-gray-700 transition font-bold text-sm">
+      <button onClick={() => setIsOpen(true)} className="bg-slate-700 text-white px-4 py-2 rounded-full shadow-md hover:bg-slate-600 transition font-bold text-sm">
         ＋ 新規
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-2">
-          {/* ★ dvh と 85dvh でスマホのキーボードやかぶりを防止 */}
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85dvh] flex flex-col py-4 sm:py-6 relative">
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-2">
+          {/* ★ 改修：高さを 95dvh に引き上げ、画面ギリギリまで広げる */}
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95dvh] flex flex-col py-4 sm:py-6 relative">
             
             <h2 className="text-xl sm:text-2xl font-bold mb-4 px-4 sm:px-8 text-gray-900 flex-shrink-0">新しい思い出を登録</h2>
             
             <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 overflow-y-auto px-4 sm:px-8 pb-4">
               
-              {/* 【左カラム】 */}
               <div className="md:col-span-5 flex flex-col gap-4">
                 <div className="aspect-[3/4] w-full max-w-[200px] mx-auto bg-gray-100 flex items-center justify-center overflow-hidden rounded border border-gray-200 shadow-inner flex-shrink-0">
                   {previewUrl ? <img src={previewUrl} alt="プレビュー" className="w-full h-full object-cover" /> : <span className="text-gray-400 text-sm">画像を選択</span>}
@@ -190,14 +181,12 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-inset focus:ring-gray-800 text-sm bg-white" />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white" />
                 </div>
               </div>
 
-              {/* 【右カラム：Notion風タグ】 */}
               <div className="md:col-span-7 flex flex-col gap-6">
                 
-                {/* 人物タグ */}
                 <div className="flex flex-col gap-1.5 relative" ref={peopleRef}>
                   <label className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">👤 Who (People)</label>
                   <div className="flex flex-wrap gap-1.5 mb-1">
@@ -240,7 +229,6 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                   )}
                 </div>
 
-                {/* イベントタグ */}
                 <div className="flex flex-col gap-1.5 relative" ref={eventRef}>
                   <label className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1">🏷️ What / Where (Event)</label>
                   <div className="flex flex-wrap gap-1.5 mb-1">
@@ -283,19 +271,17 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                   )}
                 </div>
 
-                {/* コメント */}
                 <div className="flex flex-col gap-1.5 flex-1">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comment</label>
-                  <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-inset focus:ring-gray-800 bg-white flex-1 min-h-[100px]" />
+                  <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-inset focus:ring-slate-800 bg-white flex-1 min-h-[100px]" />
                 </div>
 
               </div>
             </div>
             
-            {/* ボタン */}
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 px-6 sm:px-8 flex-shrink-0">
               <button onClick={closeModal} disabled={isSubmitting} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-bold text-xs">キャンセル</button>
-              <button onClick={handleSubmit} disabled={isSubmitting} className="px-8 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition font-bold text-xs">
+              <button onClick={handleSubmit} disabled={isSubmitting} className="px-8 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition font-bold text-xs">
                 {isSubmitting ? "保存中..." : "保存する"}
               </button>
             </div>
