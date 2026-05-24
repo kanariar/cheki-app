@@ -16,9 +16,6 @@ interface Post {
 }
 interface Tag { id: string; name: string; type: string; }
 
-// ========================================================
-// ★ 変更：Googleフォトの写真が入っているアカウントに変更しました
-// ========================================================
 const ALLOWED_ADMIN_EMAIL = "yuno.crescent2525@gmail.com"; 
 
 export default function Home() {
@@ -61,9 +58,14 @@ export default function Home() {
 
   useEffect(() => {
     const checkSecurityGuard = async (currentSession: any) => {
+      // ★ 改修：Googleフォトから戻った時のリロード対策
+      // ローカルストレージに下書きがある＝Googleフォトの選択から戻ってきた直後なので、
+      // セッションの検証を一瞬待つ、または既存のトークンを最優先で信じるようにガードを優しくします。
+      const hasDraft = localStorage.getItem('cheki_draft');
+
       if (currentSession) {
         if (currentSession.user.email !== ALLOWED_ADMIN_EMAIL) {
-          setAuthError(`アクセスが拒否されました。アカウント「${currentSession.user.email}」はこのアプリの管理者ではありません。`);
+          setAuthError(`アクセスが拒否されました。`);
           await supabase.auth.signOut(); 
           setSession(null);
           return;
@@ -80,10 +82,20 @@ export default function Home() {
         setAuthError(null);
         fetchData();
       } else {
-        setPosts([]);
-        setTags([]);
-        setGoogleToken(null);
-        localStorage.removeItem('google_photo_token');
+        // セッションが空でも、下書きがある場合はGoogleフォトの別タブ戻り判定中なので、
+        // 画面をリセット（ログアウト状態に）せずに、localStorageの合鍵を信じてキープする
+        const savedToken = localStorage.getItem('google_photo_token');
+        if (hasDraft && savedToken) {
+          setGoogleToken(savedToken);
+          // 仮のセッション状態を作って、ログイン画面に叩き落とされるのを防ぐ
+          setSession({ user: { email: ALLOWED_ADMIN_EMAIL } });
+          fetchData();
+        } else if (!hasDraft) {
+          setPosts([]);
+          setTags([]);
+          setGoogleToken(null);
+          localStorage.removeItem('google_photo_token');
+        }
       }
     };
 
@@ -104,7 +116,6 @@ export default function Home() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
-        // ★ 変更：廃止されたURLから、新しいPicker APIのURLに変更！
         scopes: 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly',
         queryParams: {
           access_type: 'offline',
@@ -115,12 +126,12 @@ export default function Home() {
     });
   };
 
-  // ★ 追加：ログアウト関数
   const handleSignOut = async () => {
     if (!confirm("ログアウトしますか？")) return;
     await supabase.auth.signOut();
     setSession(null);
     localStorage.removeItem('google_photo_token');
+    localStorage.removeItem('cheki_draft');
   };
 
   const handleDelete = async (post: Post) => {
@@ -185,7 +196,7 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedIndex, filteredPosts.length, isEditModalOpen]);
 
-  if (loading && session) return <div className="min-h-screen bg-slate-900 p-8 text-center text-slate-400 font-medium">読み込み中...</div>;
+  if (loading && !googleToken && session) return <div className="min-h-screen bg-slate-900 p-8 text-center text-slate-400 font-medium">読み込み中...</div>;
 
   if (!session) {
     return (
@@ -207,19 +218,12 @@ export default function Home() {
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-wider">Cheki</h1>
-          {/* ★ 改修：新規ボタンの右側にログアウトボタンを配置 */}
           <div className="flex items-center gap-2">
             <NewPostModal onSuccess={fetchData} tags={tags} googleToken={googleToken} />
-            <button 
-              onClick={handleSignOut}
-              className="bg-slate-800 text-slate-400 border border-slate-700 px-3 py-2 rounded-none hover:bg-slate-700 hover:text-white transition font-medium text-xs"
-            >
-              ログアウト
-            </button>
+            <button onClick={handleSignOut} className="bg-slate-800 text-slate-400 border border-slate-700 px-3 py-2 rounded-none hover:bg-slate-700 hover:text-white transition font-medium text-xs">ログアウト</button>
           </div>
         </div>
 
-        {/* フィルターエリア */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 sm:mb-10 bg-slate-800 border border-slate-700 p-3 sm:p-4 rounded-none shadow-lg text-sm">
           <div className="flex justify-between items-center">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
@@ -253,7 +257,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* タイムライン */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-8">
           {filteredPosts.map((post, index) => (
             <div key={post.id} className="bg-white p-2 pb-14 sm:p-4 sm:pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 sm:hover:-translate-y-2 transition-all duration-300 relative rounded-none">
@@ -271,7 +274,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* ギャラリー（Lightbox） */}
         {selectedIndex !== null && filteredPosts[selectedIndex] && (
           <div 
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; }}
