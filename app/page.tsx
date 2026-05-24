@@ -16,7 +16,10 @@ interface Post {
 }
 interface Tag { id: string; name: string; type: string; }
 
-const ALLOWED_ADMIN_EMAIL = "yuno.crescent25@gmail.com"; 
+// ========================================================
+// ★ 変更：Googleフォトの写真が入っているアカウントに変更しました
+// ========================================================
+const ALLOWED_ADMIN_EMAIL = "yuno.crescent2525@gmail.com"; 
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -35,8 +38,6 @@ export default function Home() {
   const touchStartY = useRef(0);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-
-  // ★ 追加：Googleフォトアクセストークン用の状態管理
   const [googleToken, setGoogleToken] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -62,18 +63,16 @@ export default function Home() {
     const checkSecurityGuard = async (currentSession: any) => {
       if (currentSession) {
         if (currentSession.user.email !== ALLOWED_ADMIN_EMAIL) {
-          setAuthError(`アクセスが拒否されました。`);
+          setAuthError(`アクセスが拒否されました。アカウント「${currentSession.user.email}」はこのアプリの管理者ではありません。`);
           await supabase.auth.signOut(); 
           setSession(null);
           return;
         }
         
-        // ★ ログイン情報からGoogleフォトの合鍵(provider_token)を取り出す
         if (currentSession.provider_token) {
           setGoogleToken(currentSession.provider_token);
           localStorage.setItem('google_photo_token', currentSession.provider_token);
         } else {
-          // セッションリフレッシュ対策でlocalStorageからも探す
           const savedToken = localStorage.getItem('google_photo_token');
           if (savedToken) setGoogleToken(savedToken);
         }
@@ -109,6 +108,14 @@ export default function Home() {
         redirectTo: `${window.location.origin}/` 
       }
     });
+  };
+
+  // ★ 追加：ログアウト関数
+  const handleSignOut = async () => {
+    if (!confirm("ログアウトしますか？")) return;
+    await supabase.auth.signOut();
+    setSession(null);
+    localStorage.removeItem('google_photo_token');
   };
 
   const handleDelete = async (post: Post) => {
@@ -180,6 +187,10 @@ export default function Home() {
       <main className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4">
         <div className="bg-white p-8 rounded-none shadow-2xl max-w-sm w-full text-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-2 tracking-wider">Cheki</h1>
+          <p className="text-sm text-gray-500 mb-6">思い出を記録するプライベート空間</p>
+          {authError && (
+            <div className="bg-red-50 text-red-600 text-xs font-semibold p-3 rounded-none mb-6 border border-red-200 text-left leading-relaxed animate-pulse">⚠️ {authError}</div>
+          )}
           <button onClick={signInWithGoogle} className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-none shadow-sm hover:bg-gray-50 transition flex items-center justify-center gap-3 font-bold text-base">Googleでログイン</button>
         </div>
       </main>
@@ -191,10 +202,19 @@ export default function Home() {
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-wider">Cheki</h1>
-          {/* ★ 改修：NewPostModal に googleToken を引き渡す */}
-          <NewPostModal onSuccess={fetchData} tags={tags} googleToken={googleToken} />
+          {/* ★ 改修：新規ボタンの右側にログアウトボタンを配置 */}
+          <div className="flex items-center gap-2">
+            <NewPostModal onSuccess={fetchData} tags={tags} googleToken={googleToken} />
+            <button 
+              onClick={handleSignOut}
+              className="bg-slate-800 text-slate-400 border border-slate-700 px-3 py-2 rounded-none hover:bg-slate-700 hover:text-white transition font-medium text-xs"
+            >
+              ログアウト
+            </button>
+          </div>
         </div>
 
+        {/* フィルターエリア */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 sm:mb-10 bg-slate-800 border border-slate-700 p-3 sm:p-4 rounded-none shadow-lg text-sm">
           <div className="flex justify-between items-center">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
@@ -228,6 +248,7 @@ export default function Home() {
           )}
         </div>
 
+        {/* タイムライン */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-8">
           {filteredPosts.map((post, index) => (
             <div key={post.id} className="bg-white p-2 pb-14 sm:p-4 sm:pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 sm:hover:-translate-y-2 transition-all duration-300 relative rounded-none">
@@ -245,6 +266,7 @@ export default function Home() {
           ))}
         </div>
 
+        {/* ギャラリー（Lightbox） */}
         {selectedIndex !== null && filteredPosts[selectedIndex] && (
           <div 
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; }}
