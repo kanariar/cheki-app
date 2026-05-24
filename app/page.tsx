@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import NewPostModal from '../components/NewPostModal';
-import EditPostModal from '../components/EditPostModal'; // ★ 追加
+import EditPostModal from '../components/EditPostModal';
 
 interface Post { 
   id: string; 
@@ -34,8 +34,10 @@ export default function Home() {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
 
-  // ★ 編集モーダルの開閉状態
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // ★ 追加：Googleフォトアクセストークン用の状態管理
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -65,28 +67,48 @@ export default function Home() {
           setSession(null);
           return;
         }
+        
+        // ★ ログイン情報からGoogleフォトの合鍵(provider_token)を取り出す
+        if (currentSession.provider_token) {
+          setGoogleToken(currentSession.provider_token);
+          localStorage.setItem('google_photo_token', currentSession.provider_token);
+        } else {
+          // セッションリフレッシュ対策でlocalStorageからも探す
+          const savedToken = localStorage.getItem('google_photo_token');
+          if (savedToken) setGoogleToken(savedToken);
+        }
+
         setAuthError(null);
         fetchData();
       } else {
         setPosts([]);
         setTags([]);
+        setGoogleToken(null);
+        localStorage.removeItem('google_photo_token');
       }
     };
+
     supabase.auth.getSession().then(({ data: { session } }) => { 
       setSession(session);
       checkSecurityGuard(session);
     });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
       setSession(session);
       checkSecurityGuard(session);
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { 
-      scopes: 'https://www.googleapis.com/auth/photoslibrary.readonly',
-      redirectTo: `${window.location.origin}/` } });
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { 
+        scopes: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+        redirectTo: `${window.location.origin}/` 
+      }
+    });
   };
 
   const handleDelete = async (post: Post) => {
@@ -169,7 +191,8 @@ export default function Home() {
       <div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-wider">Cheki</h1>
-          <NewPostModal onSuccess={fetchData} tags={tags} />
+          {/* ★ 改修：NewPostModal に googleToken を引き渡す */}
+          <NewPostModal onSuccess={fetchData} tags={tags} googleToken={googleToken} />
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 sm:mb-10 bg-slate-800 border border-slate-700 p-3 sm:p-4 rounded-none shadow-lg text-sm">
@@ -237,21 +260,12 @@ export default function Home() {
             <img src={filteredPosts[selectedIndex].image_url} className="max-w-full max-h-[100dvh] object-contain pointer-events-none" />
             
             <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex gap-2 sm:gap-3 z-50">
-              {/* ★ 編集ボタン（SVG） */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); setIsEditModalOpen(true); }} 
-                title="編集"
-                className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-blue-400 transition-all duration-300 rounded-none backdrop-blur-sm"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                </svg>
+              <button onClick={(e) => { e.stopPropagation(); setIsEditModalOpen(true); }} title="編集" className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-blue-400 transition-all duration-300 rounded-none backdrop-blur-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
               </button>
-
               <button onClick={(e) => { e.stopPropagation(); handleDelete(filteredPosts[selectedIndex]); }} title="削除" className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-red-500 transition-all duration-300 rounded-none backdrop-blur-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
               </button>
-              
               <button onClick={(e) => { e.stopPropagation(); handleClose(); }} title="閉じる" className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-white transition-all duration-300 rounded-none backdrop-blur-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
               </button>
@@ -273,7 +287,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* ★ 編集用モーダル */}
         <EditPostModal 
           isOpen={isEditModalOpen} 
           onClose={() => setIsEditModalOpen(false)} 
@@ -281,7 +294,6 @@ export default function Home() {
           tags={tags} 
           post={selectedIndex !== null ? filteredPosts[selectedIndex] : null} 
         />
-
       </div>
     </main>
   );
