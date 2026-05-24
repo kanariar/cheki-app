@@ -15,12 +15,16 @@ interface Post {
 }
 interface Tag { id: string; name: string; type: string; }
 
+// ==========================================
+// ★ あなたのGoogleアカウント
+// ==========================================
 const ALLOWED_ADMIN_EMAIL = "yuno.crescent25@gmail.com"; 
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   
+  // 3軸のフィルター状態管理
   const [selectedPeopleId, setSelectedPeopleId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>(""); 
@@ -29,10 +33,10 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // ★ 改修：単なるURLではなく「現在開いているチェキのインデックス（順番）」を管理する
+  // ギャラリー（全画面表示）の状態管理
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  // ★ スマホでのスワイプ操作用の座標記録
+  // スマホのスワイプ操作用
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
 
@@ -94,87 +98,75 @@ export default function Home() {
 
   const signOut = async () => { await supabase.auth.signOut(); };
 
+  // --- 削除ロジック ---
+  const handleDelete = async (post: Post) => {
+    if (!confirm("この思い出を完全に削除してもよろしいですか？")) return;
+    try {
+      // 1. 中間テーブルの削除
+      await supabase.from('post_tags').delete().eq('post_id', post.id);
+      // 2. 投稿の削除
+      await supabase.from('posts').delete().eq('id', post.id);
+      // 3. ストレージから画像を削除
+      const fileName = post.image_url.split('/').pop();
+      if (fileName) {
+        await supabase.storage.from('photos').remove([fileName]);
+      }
+      // 4. ステート更新
+      setPosts(posts.filter(p => p.id !== post.id));
+      setSelectedIndex(null); // モーダルを閉じる
+    } catch (error) {
+      console.error(error);
+      alert("削除に失敗しました。");
+    }
+  };
+
+  // --- ギャラリー操作ロジック ---
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedIndex !== null && selectedIndex > 0) setSelectedIndex(selectedIndex - 1);
+  };
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedIndex !== null && selectedIndex < filteredPosts.length - 1) setSelectedIndex(selectedIndex + 1);
+  };
+  const handleClose = () => setSelectedIndex(null);
+
+  // 時期フィルターの選択肢生成
   const timeOptions: { label: string; value: string }[] = [];
   const yearSet = new Set<string>();
   const yearMonthSet = new Set<string>();
-
   posts.forEach(post => {
     if (post.date) {
-      const yyyy = post.date.substring(0, 4); 
-      const yyyyMm = post.date.substring(0, 7); 
-      yearSet.add(yyyy);
-      yearMonthSet.add(yyyyMm);
+      yearSet.add(post.date.substring(0, 4));
+      yearMonthSet.add(post.date.substring(0, 7));
     }
   });
-
   Array.from(yearSet).sort().reverse().forEach(year => {
     timeOptions.push({ label: `${year}年 (すべて)`, value: year });
-    Array.from(yearMonthSet)
-      .filter(ym => ym.startsWith(year))
-      .sort().reverse()
-      .forEach(ym => {
-        const month = ym.substring(5, 7);
-        timeOptions.push({ label: ` ${year}.${month}`, value: ym }); 
-      });
+    Array.from(yearMonthSet).filter(ym => ym.startsWith(year)).sort().reverse().forEach(ym => {
+      timeOptions.push({ label: ` ${year}.${ym.substring(5, 7)}`, value: ym }); 
+    });
   });
 
+  // フィルター実行
   const filteredPosts = posts.filter(post => {
-    if (selectedPeopleId) {
-      const hasPeople = post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedPeopleId));
-      if (!hasPeople) return false;
-    }
-    if (selectedEventId) {
-      const hasEvent = post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedEventId));
-      if (!hasEvent) return false;
-    }
-    if (selectedTime) {
-      if (!post.date || !post.date.startsWith(selectedTime)) return false;
-    }
+    if (selectedPeopleId && !post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedPeopleId))) return false;
+    if (selectedEventId && !post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedEventId))) return false;
+    if (selectedTime && (!post.date || !post.date.startsWith(selectedTime))) return false;
     return true;
   });
 
   const handleResetFilter = () => {
-    setSelectedPeopleId("");
-    setSelectedEventId("");
-    setSelectedTime("");
+    setSelectedPeopleId(""); setSelectedEventId(""); setSelectedTime("");
   };
 
-  // ========================================================
-  // ★ ギャラリー（Lightbox）操作のロジック
-  // ========================================================
-
-  const handlePrev = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (selectedIndex !== null && selectedIndex > 0) {
-      setSelectedIndex(selectedIndex - 1);
-    }
-  };
-
-  const handleNext = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (selectedIndex !== null && selectedIndex < filteredPosts.length - 1) {
-      setSelectedIndex(selectedIndex + 1);
-    }
-  };
-
-  const handleClose = () => setSelectedIndex(null);
-
-  // ★【追加】ギャラリーが開いている間、裏側の画面（body）のスクロールを禁止する魔法
+  // 背景スクロール禁止
   useEffect(() => {
-    if (selectedIndex !== null) {
-      // ギャラリーが開いたとき、bodyのスクロールを殺す
-      document.body.style.overflow = 'hidden';
-    } else {
-      // ギャラリーが閉じたとき、bodyのスクロールを復活させる
-      document.body.style.overflow = '';
-    }
-    // クリーンアップ関数（コンポーネントが消えるときに念のため復活させる）
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [selectedIndex]); // selectedIndex が変わるたびに実行
+    document.body.style.overflow = selectedIndex !== null ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [selectedIndex]);
 
-  // PCでのキーボード操作（Esc, 矢印キー）
+  // キーボード操作
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedIndex === null) return;
@@ -186,31 +178,6 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedIndex, filteredPosts.length]);
 
-  // スマホでのスワイプ操作
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-    const deltaX = touchStartX.current - touchEndX;
-    const deltaY = touchStartY.current - touchEndY;
-
-    // 横移動の方が大きい場合（左右スワイプ）
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      if (deltaX > 50) handleNext(); // 左にスワイプ（次へ）
-      else if (deltaX < -50) handlePrev(); // 右にスワイプ（前へ）
-    } 
-    // 縦移動の方が大きい場合（上下スワイプ）
-    else {
-      if (deltaY < -50) handleClose(); // 下にスワイプ（閉じる）
-    }
-  };
-
-  // ========================================================
-
   if (loading && session) return <div className="min-h-screen bg-slate-900 p-8 text-center text-slate-400 font-medium">読み込み中...</div>;
 
   if (!session) {
@@ -218,13 +185,7 @@ export default function Home() {
       <main className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4">
         <div className="bg-white p-8 rounded-none shadow-2xl max-w-sm w-full text-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-2 tracking-wider">Cheki</h1>
-          <p className="text-sm text-gray-500 mb-6">思い出を記録するプライベート空間</p>
-          {authError && (
-            <div className="bg-red-50 text-red-600 text-xs font-semibold p-3 rounded-xl mb-6 border border-red-200 text-left leading-relaxed animate-pulse">⚠️ {authError}</div>
-          )}
-          <button onClick={signInWithGoogle} className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-none shadow-sm hover:bg-gray-50 transition flex items-center justify-center gap-3 font-bold text-base">
-            Googleアカウントでログイン
-          </button>
+          <button onClick={signInWithGoogle} className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-none shadow-sm hover:bg-gray-50 transition flex items-center justify-center gap-3 font-bold text-base">Googleでログイン</button>
         </div>
       </main>
     );
@@ -233,22 +194,19 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-900 p-3 sm:p-8">
       <div className="max-w-5xl mx-auto">
-        
         <div className="flex justify-between items-center mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-wider">Cheki</h1>
-          <div className="flex items-center gap-3">
-            <NewPostModal onSuccess={fetchData} tags={tags} />
-          </div>
+          <NewPostModal onSuccess={fetchData} tags={tags} />
         </div>
 
+        {/* フィルターエリア */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 sm:mb-10 bg-slate-800 border border-slate-700 p-3 sm:p-4 rounded-none shadow-lg text-sm">
           <div className="flex justify-between items-center">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
             {(selectedPeopleId || selectedEventId || selectedTime) && (
-              <button onClick={handleResetFilter} className="sm:hidden text-[10px] sm:text-xs font-bold text-red-400 hover:text-red-300 underline transition">🔄 リセット</button>
+              <button onClick={handleResetFilter} className="sm:hidden text-[10px] sm:text-xs font-bold text-red-400 underline transition">🔄 リセット</button>
             )}
           </div>
-          
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-slate-400 w-4 sm:w-5 text-center text-xs sm:text-sm">📅</span>
             <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white font-medium text-[10px] sm:text-xs">
@@ -256,7 +214,6 @@ export default function Home() {
               {timeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
           </div>
-
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-slate-400 w-4 sm:w-5 text-center text-xs sm:text-sm">👤</span>
             <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white font-medium text-[10px] sm:text-xs">
@@ -264,7 +221,6 @@ export default function Home() {
               {tags.filter(t => t.type === 'people').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
           </div>
-
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-slate-400 w-4 sm:w-5 text-center text-xs sm:text-sm">🏷️</span>
             <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white font-medium text-[10px] sm:text-xs">
@@ -272,118 +228,67 @@ export default function Home() {
               {tags.filter(t => t.type === 'event').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
           </div>
-
           {(selectedPeopleId || selectedEventId || selectedTime) && (
-            <button onClick={handleResetFilter} className="hidden sm:block text-xs font-bold text-red-400 hover:text-red-300 underline ml-auto transition">
-              🔄 フィルターをリセット
-            </button>
+            <button onClick={handleResetFilter} className="hidden sm:block text-xs font-bold text-red-400 underline ml-auto transition">🔄 フィルターをリセット</button>
           )}
         </div>
 
+        {/* タイムライン */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-8">
-          {/* ★ 改修：mapに index を渡し、クリック時にその index をセットする */}
           {filteredPosts.map((post, index) => (
             <div key={post.id} className="bg-white p-2 pb-14 sm:p-4 sm:pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 sm:hover:-translate-y-2 transition-all duration-300 relative rounded-none">
-              
-              <div 
-                onClick={() => setSelectedIndex(index)}
-                className="aspect-[3/4] bg-gray-200 mb-2 sm:mb-4 overflow-hidden rounded-none cursor-zoom-in relative select-none"
-              >
-                <img 
-                  src={post.image_url} 
-                  alt="チェキ" 
-                  className="w-full h-full object-cover pointer-events-none" 
-                  style={{ objectPosition: `${post.image_position}% center` }}
-                />
+              <div onClick={() => setSelectedIndex(index)} className="aspect-[3/4] bg-gray-200 mb-2 sm:mb-4 overflow-hidden rounded-none cursor-zoom-in relative select-none">
+                <img src={post.image_url} className="w-full h-full object-cover" style={{ objectPosition: `${post.image_position}% center` }} />
               </div>
-
               <div className="text-gray-800 font-medium text-xs sm:text-lg leading-relaxed mb-2 sm:mb-3 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">{post.comment}</div>
-              
-              <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-5 text-gray-400 font-mono text-[9px] sm:text-sm tracking-tighter italic font-bold">
-                {post.date ? post.date.replace(/-/g, '.') : '----.--.--'}
-              </div>
-
+              <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-5 text-gray-400 font-mono text-[9px] sm:text-sm tracking-tighter italic font-bold">{post.date ? post.date.replace(/-/g, '.') : '----.--.--'}</div>
               <div className="flex flex-wrap gap-0.5 sm:gap-1 absolute bottom-2 left-2 sm:bottom-4 sm:left-4 max-w-[85%] sm:max-w-[70%]">
                 {post.post_tags?.map((pt, i) => pt.tags && (
-                  <span key={i} className={`text-[8px] sm:text-[10px] font-bold px-1 py-0.5 sm:px-1.5 rounded-none border shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
-                    #{pt.tags.name}
-                  </span>
+                  <span key={i} className={`text-[8px] sm:text-[10px] font-bold px-1 py-0.5 sm:px-1.5 rounded-none border shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-green-50 text-green-600 border-green-100'}`}>#{pt.tags.name}</span>
                 ))}
               </div>
             </div>
           ))}
         </div>
-        {filteredPosts.length === 0 && <div className="text-center text-slate-400 mt-20 font-medium text-sm sm:text-base">条件に合う思い出が見つかりません。</div>}
 
-        {/* ========================================================
-            ★ ギャラリー（Lightbox）カルーセルUI
-            ======================================================== */}
+        {/* ギャラリー（Lightbox） */}
         {selectedIndex !== null && filteredPosts[selectedIndex] && (
           <div 
-            onClick={handleClose}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
+            onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; }}
+            onTouchEnd={(e) => {
+              const deltaX = touchStartX.current - e.changedTouches[0].clientX;
+              const deltaY = touchStartY.current - e.changedTouches[0].clientY;
+              if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                if (deltaX > 50) handleNext(); else if (deltaX < -50) handlePrev();
+              } else if (deltaY < -50) handleClose();
+            }}
             className="fixed inset-0 bg-black z-50 flex items-center justify-center animate-fadeIn select-none"
           >
-            {/* メイン写真（見切れなし・比率維持） */}
-            <img 
-              src={filteredPosts[selectedIndex].image_url} 
-              alt="拡大画像" 
-              className="max-w-full max-h-[100dvh] object-contain pointer-events-none"
-            />
+            <img src={filteredPosts[selectedIndex].image_url} className="max-w-full max-h-[100dvh] object-contain pointer-events-none" />
+            
+            <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex gap-3 z-50">
+              {/* 削除ボタン */}
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(filteredPosts[selectedIndex]); }} className="bg-red-600 text-white p-3 rounded-none shadow-xl hover:bg-red-700 transition">🗑️</button>
+              {/* 閉じるボタン */}
+              <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="text-white bg-black bg-opacity-40 hover:bg-opacity-60 p-3 rounded-none transition">✕</button>
+            </div>
 
-            {/* 閉じるボタン (PC/スマホ共通) */}
-            <button 
-              onClick={handleClose}
-              className="absolute top-4 sm:top-6 right-4 sm:right-6 text-white bg-black bg-opacity-40 hover:bg-opacity-60 p-2 sm:p-3 rounded-full transition z-50"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-
-            {/* 戻る・次へボタン (PCでのみ表示、スマホはスワイプ操作のため非表示) */}
-            {selectedIndex > 0 && (
-              <button onClick={handlePrev} className="hidden sm:block absolute left-6 top-1/2 transform -translate-y-1/2 text-white bg-black bg-opacity-30 hover:bg-opacity-60 p-4 rounded-full transition">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-            )}
-            {selectedIndex < filteredPosts.length - 1 && (
-              <button onClick={handleNext} className="hidden sm:block absolute right-6 top-1/2 transform -translate-y-1/2 text-white bg-black bg-opacity-30 hover:bg-opacity-60 p-4 rounded-full transition">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            )}
-
-            {/* 情報オーバーレイ（下部の黒いグラデーションに乗せる） */}
-            <div 
-              onClick={(e) => e.stopPropagation()} // 文字をタップしても閉じないようにする
-              className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-6 sm:p-10 pt-20"
-            >
+            {/* 情報オーバーレイ */}
+            <div onClick={(e) => e.stopPropagation()} className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-6 sm:p-10 pt-20">
               <div className="max-w-3xl mx-auto flex flex-col gap-3">
-                {/* コメント */}
-                {filteredPosts[selectedIndex].comment && (
-                  <p className="text-white text-sm sm:text-lg font-medium leading-relaxed whitespace-pre-wrap">
-                    {filteredPosts[selectedIndex].comment}
-                  </p>
-                )}
-                
-                {/* 日付とタグ */}
+                <p className="text-white text-sm sm:text-lg font-medium leading-relaxed whitespace-pre-wrap">{filteredPosts[selectedIndex].comment}</p>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
-                  <span className="text-gray-300 font-mono text-sm tracking-widest font-bold">
-                    {filteredPosts[selectedIndex].date?.replace(/-/g, '.')}
-                  </span>
+                  <span className="text-gray-300 font-mono text-sm tracking-widest font-bold">{filteredPosts[selectedIndex].date?.replace(/-/g, '.')}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {filteredPosts[selectedIndex].post_tags?.map((pt, i) => pt.tags && (
-                      <span key={i} className={`text-xs font-bold px-2 py-1 rounded-none shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}>
-                        #{pt.tags.name}
-                      </span>
+                      <span key={i} className={`text-xs font-bold px-2 py-1 rounded-none shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}>#{pt.tags.name}</span>
                     ))}
                   </div>
                 </div>
               </div>
             </div>
-
           </div>
         )}
-
       </div>
     </main>
   );
