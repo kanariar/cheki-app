@@ -10,20 +10,17 @@ interface Post {
   comment: string; 
   date: string; 
   created_at: string; 
+  image_position: number; // ★ 追加
   post_tags: { tags: { id: string; name: string; type: string } }[]; 
 }
 interface Tag { id: string; name: string; type: string; }
 
-// ==========================================
-// ★ あなたのGoogleアカウント
-// ==========================================
 const ALLOWED_ADMIN_EMAIL = "yuno.crescent25@gmail.com"; 
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   
-  // 3軸のフィルター状態管理（人物・イベント・時期）
   const [selectedPeopleId, setSelectedPeopleId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>(""); 
@@ -32,12 +29,16 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // ★ 拡大表示用の状態管理
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+
   const fetchData = async () => {
     try {
       setLoading(true);
+      // image_position も一緒に取得する
       const { data: postsData } = await supabase
         .from('posts')
-        .select(`id, image_url, comment, date, created_at, post_tags (tags ( id, name, type ))`)
+        .select(`id, image_url, comment, date, created_at, image_position, post_tags (tags ( id, name, type ))`)
         .order('date', { ascending: false });
       
       const { data: tagsData } = await supabase.from('tags').select('*');
@@ -55,7 +56,7 @@ export default function Home() {
     const checkSecurityGuard = async (currentSession: any) => {
       if (currentSession) {
         if (currentSession.user.email !== ALLOWED_ADMIN_EMAIL) {
-          setAuthError(`アクセスが拒否されました。アカウント「${currentSession.user.email}」はこのアプリの管理者ではありません。`);
+          setAuthError(`アクセスが拒否されました。`);
           await supabase.auth.signOut(); 
           setSession(null);
           return;
@@ -140,13 +141,9 @@ export default function Home() {
   if (!session) {
     return (
       <main className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
+        <div className="bg-white p-8 rounded-none shadow-2xl max-w-sm w-full text-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-2 tracking-wider">Cheki</h1>
-          <p className="text-sm text-gray-500 mb-6">思い出を記録するプライベート空間</p>
-          {authError && (
-            <div className="bg-red-50 text-red-600 text-xs font-semibold p-3 rounded-xl mb-6 border border-red-200 text-left leading-relaxed animate-pulse">⚠️ {authError}</div>
-          )}
-          <button onClick={signInWithGoogle} className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-xl shadow-sm hover:bg-gray-50 transition flex items-center justify-center gap-3 font-bold text-base">
+          <button onClick={signInWithGoogle} className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-none shadow-sm hover:bg-gray-50 transition flex items-center justify-center gap-3 font-bold text-base">
             Googleアカウントでログイン
           </button>
         </div>
@@ -154,12 +151,10 @@ export default function Home() {
     );
   }
 
-  // ★ 改修：エラーの原因だったコメントを return の外側に移動させました
   return (
     <main className="min-h-screen bg-slate-900 p-4 sm:p-8">
       <div className="max-w-5xl mx-auto">
         
-        {/* ヘッダーエリア */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-wider">Cheki</h1>
           <div className="flex items-center gap-3">
@@ -167,21 +162,18 @@ export default function Home() {
           </div>
         </div>
 
-        {/* フィルターエリア */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-10 bg-slate-800 border border-slate-700 p-4 rounded-xl shadow-lg text-sm">
-          
+        {/* フィルター */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-10 bg-slate-800 border border-slate-700 p-4 rounded-none shadow-lg text-sm">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
             {(selectedPeopleId || selectedEventId || selectedTime) && (
-              <button onClick={handleResetFilter} className="sm:hidden text-xs font-bold text-red-400 hover:text-red-300 underline transition">
-                🔄 リセット
-              </button>
+              <button onClick={handleResetFilter} className="sm:hidden text-xs font-bold text-red-400 hover:text-red-300 underline transition">🔄 リセット</button>
             )}
           </div>
           
           <div className="flex items-center gap-2">
             <span className="text-slate-400 w-5 text-center">📅</span>
-            <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-2 rounded-md bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-xs">
+            <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-2 rounded-none bg-slate-700 text-white font-medium text-xs">
               <option value="">すべての時期</option>
               {timeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
@@ -189,7 +181,7 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             <span className="text-slate-400 w-5 text-center">👤</span>
-            <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-2 rounded-md bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-xs">
+            <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-2 rounded-none bg-slate-700 text-white font-medium text-xs">
               <option value="">すべての人物</option>
               {tags.filter(t => t.type === 'people').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
@@ -197,26 +189,33 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             <span className="text-slate-400 w-5 text-center">🏷️</span>
-            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-2 rounded-md bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-xs">
+            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-2 rounded-none bg-slate-700 text-white font-medium text-xs">
               <option value="">すべてのイベント</option>
               {tags.filter(t => t.type === 'event').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
           </div>
-
-          {(selectedPeopleId || selectedEventId || selectedTime) && (
-            <button onClick={handleResetFilter} className="hidden sm:block text-xs font-bold text-red-400 hover:text-red-300 underline ml-auto transition">
-              🔄 フィルターをリセット
-            </button>
-          )}
         </div>
 
         {/* タイムライン */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
           {filteredPosts.map((post) => (
-            <div key={post.id} className="bg-white p-4 pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 relative rounded-sm">
-              <div className="aspect-[3/4] bg-gray-200 mb-4 overflow-hidden rounded-sm">
-                <img src={post.image_url} alt="チェキ" className="w-full h-full object-cover" />
+            /* ★ 改修: rounded-none にして角を完全な90度(シャープ)に変更 */
+            <div key={post.id} className="bg-white p-4 pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 relative rounded-none">
+              
+              {/* ★ 改修: タップしたら拡大できるように onClick を追加し、カーソルを虫眼鏡(cursor-zoom-in)に */}
+              <div 
+                onClick={() => setZoomImageUrl(post.image_url)}
+                className="aspect-[3/4] bg-gray-200 mb-4 overflow-hidden rounded-none cursor-zoom-in relative select-none"
+              >
+                {/* ★ 改修: 保存された image_position をオブジェクトポジション（％）として適用！ */}
+                <img 
+                  src={post.image_url} 
+                  alt="チェキ" 
+                  className="w-full h-full object-cover pointer-events-none" 
+                  style={{ objectPosition: `${post.image_position}% center` }}
+                />
               </div>
+
               <div className="text-gray-800 font-medium text-lg leading-relaxed mb-3 whitespace-pre-wrap">{post.comment}</div>
               
               <div className="absolute bottom-4 right-5 text-gray-400 font-mono text-sm tracking-tighter italic font-bold">
@@ -225,14 +224,7 @@ export default function Home() {
 
               <div className="flex flex-wrap gap-1 absolute bottom-4 left-4 max-w-[70%]">
                 {post.post_tags?.map((pt, i) => pt.tags && (
-                  <span 
-                    key={i} 
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shadow-sm ${
-                      pt.tags.type === 'people' 
-                        ? 'bg-blue-50 text-blue-600 border-blue-100' 
-                        : 'bg-green-50 text-green-600 border-green-100'
-                    }`}
-                  >
+                  <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded-none border shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
                     #{pt.tags.name}
                   </span>
                 ))}
@@ -240,7 +232,24 @@ export default function Home() {
             </div>
           ))}
         </div>
-        {filteredPosts.length === 0 && <div className="text-center text-slate-400 mt-20 font-medium">条件に合う思い出が見つかりません。</div>}
+
+        {/* ★ 改修：全画面拡大表示用モーダル (Lightbox) */}
+        {zoomImageUrl && (
+          <div 
+            onClick={() => setZoomImageUrl(null)}
+            className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-4 cursor-zoom-out animate-fadeIn animate-duration-200"
+          >
+            <img 
+              src={zoomImageUrl} 
+              alt="拡大画像" 
+              className="max-w-full max-h-full object-contain shadow-2xl select-none"
+            />
+            <div className="absolute top-4 right-4 text-white font-bold bg-slate-800 bg-opacity-50 px-3 py-1.5 rounded-full text-xs">
+              タップして閉じる
+            </div>
+          </div>
+        )}
+
       </div>
     </main>
   );

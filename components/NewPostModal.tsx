@@ -23,6 +23,13 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ★ 画像のスライド位置調整用の状態管理 (初期値50%＝中央)
+  const [imagePosition, setImagePosition] = useState<number>(50);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startPos = useRef(50);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
   const [addedPeopleNames, setAddedPeopleNames] = useState<string[]>([]);
@@ -50,6 +57,7 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
     if (selectedFile) {
       setFile(selectedFile);
       setPreviewUrl(URL.createObjectURL(selectedFile));
+      setImagePosition(50); // 画像が変わったら中央にリセット
       try {
         const exifData = await exifr.parse(selectedFile);
         if (exifData && exifData.DateTimeOriginal) {
@@ -65,12 +73,45 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
     }
   };
 
+  // ★ ドラッグ / タッチ開始
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!previewUrl) return;
+    isDragging.current = true;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    startX.current = clientX;
+    startPos.current = imagePosition;
+  };
+
+  // ★ ドラッグ / タッチ移動中（位置の計算）
+  const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDragging.current || !containerRef.current) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const deltaX = clientX - startX.current;
+    const containerWidth = containerRef.current.offsetWidth;
+    
+    // スライド量に応じてパーセンテージを計算（感度調整のため 0.15 を掛ける）
+    const walk = (deltaX / containerWidth) * 100 * 0.15;
+    let newPos = startPos.current - walk; // 逆方向に動かすことで直感的に
+    
+    // 0% 〜 100% の間に制限
+    if (newPos < 0) newPos = 0;
+    if (newPos > 100) newPos = 100;
+    
+    setImagePosition(Math.round(newPos));
+  };
+
+  // ★ ドラッグ / タッチ終了
+  const handleDragEnd = () => {
+    isDragging.current = false;
+  };
+
   const closeModal = () => {
     setIsOpen(false);
     setPreviewUrl(null);
     setFile(null);
     setComment("");
     setDate(new Date().toISOString().split('T')[0]);
+    setImagePosition(50);
     setSelectedPeopleIds([]);
     setSelectedEventIds([]);
     setAddedPeopleNames([]);
@@ -96,18 +137,20 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage.from('photos').getPublicUrl(fileName);
+      
+      // ★ image_position も一緒に保存
       const { data: newPost, error: insertError } = await supabase.from('posts').insert({
           user_id: user.id,
           image_url: publicUrlData.publicUrl,
           comment: comment,
           date: date,
+          image_position: imagePosition, 
         }).select().single();
 
       if (insertError) throw insertError;
 
       if (newPost) {
         const finalTagIds = [...selectedPeopleIds, ...selectedEventIds];
-        
         for (const name of addedPeopleNames) {
           const { data: tagData } = await supabase.from('tags').upsert({ name, type: 'people' }, { onConflict: 'name' }).select().single();
           if (tagData) finalTagIds.push(tagData.id);
@@ -116,7 +159,6 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
           const { data: tagData } = await supabase.from('tags').upsert({ name, type: 'event' }, { onConflict: 'name' }).select().single();
           if (tagData) finalTagIds.push(tagData.id);
         }
-
         for (const tagId of finalTagIds) {
           await supabase.from('post_tags').insert({ post_id: newPost.id, tag_id: tagId });
         }
@@ -158,49 +200,80 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
 
   return (
     <>
-      <button onClick={() => setIsOpen(true)} className="bg-slate-700 text-white px-4 py-2 rounded-full shadow-md hover:bg-slate-600 transition font-bold text-sm">
+      <button onClick={() => setIsOpen(true)} className="bg-slate-700 text-white px-4 py-2 rounded-none shadow-md hover:bg-slate-600 transition font-bold text-sm">
         ＋ 新規
       </button>
 
       {isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-2">
-          {/* ★ 改修：高さを 95dvh に引き上げ、画面ギリギリまで広げる */}
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95dvh] flex flex-col py-4 sm:py-6 relative">
+          {/* ★ rounded-none にして角を完全にシャープ化 */}
+          <div className="bg-white rounded-none shadow-2xl w-full max-w-4xl max-h-[95dvh] flex flex-col py-4 sm:py-6 relative">
             
             <h2 className="text-xl sm:text-2xl font-bold mb-4 px-4 sm:px-8 text-gray-900 flex-shrink-0">新しい思い出を登録</h2>
             
             <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 overflow-y-auto px-4 sm:px-8 pb-4">
               
+              {/* 【左カラム】 */}
               <div className="md:col-span-5 flex flex-col gap-4">
-                <div className="aspect-[3/4] w-full max-w-[200px] mx-auto bg-gray-100 flex items-center justify-center overflow-hidden rounded border border-gray-200 shadow-inner flex-shrink-0">
-                  {previewUrl ? <img src={previewUrl} alt="プレビュー" className="w-full h-full object-cover" /> : <span className="text-gray-400 text-sm">画像を選択</span>}
+                
+                {/* ★ 改修: ドラッグ/タッチイベントを追加。カーソルを左右移動(cursor-ew-resize)に変更 */}
+                <div 
+                  ref={containerRef}
+                  onMouseDown={handleDragStart}
+                  onMouseMove={handleDragMove}
+                  onMouseUp={handleDragEnd}
+                  onMouseLeave={handleDragEnd}
+                  onTouchStart={handleDragStart}
+                  onTouchMove={handleDragMove}
+                  onTouchEnd={handleDragEnd}
+                  className="aspect-[3/4] w-full max-w-[200px] mx-auto bg-gray-100 flex items-center justify-center overflow-hidden rounded-none border border-gray-200 shadow-inner flex-shrink-0 cursor-ew-resize select-none relative"
+                >
+                  {previewUrl ? (
+                    <>
+                      <img 
+                        src={previewUrl} 
+                        alt="プレビュー" 
+                        className="w-full h-full object-cover pointer-events-none" 
+                        style={{ objectPosition: `${imagePosition}% center` }} // スライド値を反映
+                      />
+                      {/* 操作を促す薄いナビ表示 */}
+                      <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 text-white text-[9px] text-center py-1 rounded-sm pointer-events-none tracking-tighter">
+                        左右にスライドして位置調整
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-gray-400 text-sm">画像を選択</span>
+                  )}
                 </div>
+
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Photo</label>
-                  <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs text-gray-900 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-bold file:bg-gray-100 file:text-gray-700 cursor-pointer" />
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs text-gray-900 file:mr-3 file:py-1.5 file:px-3 file:rounded-none file:border-0 file:text-[10px] file:font-bold file:bg-gray-100 file:text-gray-700 cursor-pointer" />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white" />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-none focus:ring-2 focus:ring-inset focus:ring-slate-800 text-sm bg-white" />
                 </div>
               </div>
 
+              {/* 【右カラム】 */}
               <div className="md:col-span-7 flex flex-col gap-6">
                 
+                {/* 人物タグ */}
                 <div className="flex flex-col gap-1.5 relative" ref={peopleRef}>
                   <label className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">👤 Who (People)</label>
                   <div className="flex flex-wrap gap-1.5 mb-1">
                     {selectedPeopleIds.map(id => {
                       const t = tags.find(tag => String(tag.id) === String(id));
                       return t && (
-                        <span key={id} className="inline-flex items-center bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                          #{t.name} <button onClick={() => setSelectedPeopleIds(prev => prev.filter(i => i !== id))} className="ml-1 text-blue-200 hover:text-white">×</button>
+                        <span key={id} className="inline-flex items-center bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-none shadow-sm">
+                          #{t.name} <button onClick={() => setSelectedPeopleIds(prev => prev.filter(i => i !== id))} className="ml-1 text-blue-200">×</button>
                         </span>
                       );
                     })}
                     {addedPeopleNames.map(name => (
-                      <span key={name} className="inline-flex items-center bg-cyan-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                        #{name} (新) <button onClick={() => setAddedPeopleNames(prev => prev.filter(n => n !== name))} className="ml-1 text-cyan-200 hover:text-white">×</button>
+                      <span key={name} className="inline-flex items-center bg-cyan-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-none shadow-sm">
+                        #{name} (新) <button onClick={() => setAddedPeopleNames(prev => prev.filter(n => n !== name))} className="ml-1 text-cyan-200">×</button>
                       </span>
                     ))}
                   </div>
@@ -210,10 +283,10 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                     value={peopleInput}
                     onFocus={() => setShowPeopleList(true)}
                     onChange={(e) => setPeopleInput(e.target.value)}
-                    className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full border border-gray-300 p-2.5 rounded-none text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                   {showPeopleList && (
-                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                       {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (
                         <button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center">
                           <span>#{t.name}</span>
@@ -229,20 +302,21 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                   )}
                 </div>
 
+                {/* イベントタグ */}
                 <div className="flex flex-col gap-1.5 relative" ref={eventRef}>
                   <label className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1">🏷️ What / Where (Event)</label>
                   <div className="flex flex-wrap gap-1.5 mb-1">
                     {selectedEventIds.map(id => {
                       const t = tags.find(tag => String(tag.id) === String(id));
                       return t && (
-                        <span key={id} className="inline-flex items-center bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                          #{t.name} <button onClick={() => setSelectedEventIds(prev => prev.filter(i => i !== id))} className="ml-1 text-green-200 hover:text-white">×</button>
+                        <span key={id} className="inline-flex items-center bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-none shadow-sm">
+                          #{t.name} <button onClick={() => setSelectedEventIds(prev => prev.filter(i => i !== id))} className="ml-1 text-green-200">×</button>
                         </span>
                       );
                     })}
                     {addedEventNames.map(name => (
-                      <span key={name} className="inline-flex items-center bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                        #{name} (新) <button onClick={() => setAddedEventNames(prev => prev.filter(n => n !== name))} className="ml-1 text-emerald-200 hover:text-white">×</button>
+                      <span key={name} className="inline-flex items-center bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-none shadow-sm">
+                        #{name} (新) <button onClick={() => setAddedEventNames(prev => prev.filter(n => n !== name))} className="ml-1 text-emerald-200">×</button>
                       </span>
                     ))}
                   </div>
@@ -252,10 +326,10 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                     value={eventInput}
                     onFocus={() => setShowEventList(true)}
                     onChange={(e) => setEventInput(e.target.value)}
-                    className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none"
+                    className="w-full border border-gray-300 p-2.5 rounded-none text-sm focus:ring-2 focus:ring-green-500 focus:outline-none"
                   />
                   {showEventList && (
-                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                       {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (
                         <button key={t.id} onClick={() => toggleSelection(t.id, 'event')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center">
                           <span>#{t.name}</span>
@@ -271,17 +345,19 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                   )}
                 </div>
 
+                {/* コメント */}
                 <div className="flex flex-col gap-1.5 flex-1">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comment</label>
-                  <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-inset focus:ring-slate-800 bg-white flex-1 min-h-[100px]" />
+                  <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-none text-sm focus:ring-2 focus:ring-inset focus:ring-slate-800 bg-white flex-1 min-h-[100px]" />
                 </div>
 
               </div>
             </div>
             
+            {/* ボタン */}
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 px-6 sm:px-8 flex-shrink-0">
-              <button onClick={closeModal} disabled={isSubmitting} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-bold text-xs">キャンセル</button>
-              <button onClick={handleSubmit} disabled={isSubmitting} className="px-8 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition font-bold text-xs">
+              <button onClick={closeModal} disabled={isSubmitting} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-none hover:bg-gray-300 transition font-bold text-xs">キャンセル</button>
+              <button onClick={handleSubmit} disabled={isSubmitting} className="px-8 py-2 bg-slate-800 text-white rounded-none hover:bg-slate-700 transition font-bold text-xs">
                 {isSubmitting ? "保存中..." : "保存する"}
               </button>
             </div>
