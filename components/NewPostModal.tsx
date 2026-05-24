@@ -113,7 +113,14 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
           if (itemsData.mediaItems && itemsData.mediaItems.length > 0) {
             const photo = itemsData.mediaItems[0];
             const downloadUrl = `${photo.mediaFile.baseUrl}=w600-h800`;
-            const proxyRes = await fetch(`/api/proxy-image?url=${encodeURIComponent(downloadUrl)}`);
+            
+            // ★ 修正：中継API（proxy-image）に対しても、Googleの合鍵（Authorization）を渡して引き抜く！
+            const proxyRes = await fetch(`/api/proxy-image?url=${encodeURIComponent(downloadUrl)}`, {
+              headers: { 'Authorization': `Bearer ${googleToken}` }
+            });
+            
+            if (!proxyRes.ok) throw new Error("画像のダウンロードに失敗しました");
+            
             const blob = await proxyRes.blob();
             const googleFile = new File([blob], "google-photo.jpg", { type: "image/jpeg" });
             
@@ -278,7 +285,6 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                   {showPeopleList && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                       {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span>#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}</button>))}
-                      {/* ★ タイポ修正箇所（input → peopleInput） */}
                       {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === peopleInput.trim()) && (<button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{peopleInput}" を新しく追加する</button>)}
                     </div>
                   )}
@@ -294,7 +300,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                   {showEventList && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                       {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'event')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span>#{t.name}</span>{selectedEventIds.includes(t.id) && <span className="text-green-600 text-xs">✓</span>}</button>))}
-                      {eventInput.trim() && !tags.some(t => t.type === 'event' && t.name === eventInput.trim()) && (<button onClick={() => createNewTag(eventInput, 'event')} className="w-full text-left px-4 py-3 text-sm text-green-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-green-100">✨ "{eventInput}" を新しく追加する</button>)}
+                      {eventInput.trim() && !tags.some(t => t.type === 'event' && t.name === eventInput.trim()) && (<button onClick={() => createNewTag(eventInput, 'event')} className="w-full text-left px-4 py-3 text-sm text-green-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{eventInput}" を新しく追加する</button>)}
                     </div>
                   )}
                 </div>

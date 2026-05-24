@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
+  // ★ 改修：フロントエンドから送られてきたGoogleの合鍵（トークン）を受け取る
+  const token = request.headers.get('Authorization'); 
   const { searchParams } = new URL(request.url);
   const imageUrl = searchParams.get('url');
 
@@ -9,11 +11,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // サーバーサイドで一度Googleフォトの画像を代わりにダウンロードする
-    const response = await fetch(imageUrl);
+    // GoogleフォトPicker APIの最新セキュリティ仕様に合わせ、
+    // 画像をダウンロードする瞬間にも認証ヘッダーを付与する！
+    const fetchOptions: RequestInit = {};
+    if (token) {
+      fetchOptions.headers = { 'Authorization': token };
+    }
+
+    const response = await fetch(imageUrl, fetchOptions);
+    
+    if (!response.ok) {
+      return NextResponse.json({ error: 'Google rejected image download' }, { status: response.status });
+    }
+
     const blob = await response.blob();
     
-    // フロントエンド（ブラウザ）に安全にデータを引き渡す
     return new NextResponse(blob, {
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
