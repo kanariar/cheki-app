@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import exifr from 'exifr';
 
@@ -23,15 +23,32 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 選択済みのタグ
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
+  // 新規作成予定のタグ名
   const [addedPeopleNames, setAddedPeopleNames] = useState<string[]>([]);
   const [addedEventNames, setAddedEventNames] = useState<string[]>([]);
 
-  const [isCreatingPeople, setIsCreatingPeople] = useState(false);
-  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
-  const [newPeopleName, setNewPeopleName] = useState("");
-  const [newEventName, setNewEventName] = useState("");
+  // 入力中のテキスト
+  const [peopleInput, setPeopleInput] = useState("");
+  const [eventInput, setEventInput] = useState("");
+  // 候補リストの表示管理
+  const [showPeopleList, setShowPeopleList] = useState(false);
+  const [showEventList, setShowEventList] = useState(false);
+
+  const peopleRef = useRef<HTMLDivElement>(null);
+  const eventRef = useRef<HTMLDivElement>(null);
+
+  // 外側をクリックしたらリストを閉じる
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (peopleRef.current && !peopleRef.current.contains(e.target as Node)) setShowPeopleList(false);
+      if (eventRef.current && !eventRef.current.contains(e.target as Node)) setShowEventList(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -53,46 +70,6 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
     }
   };
 
-  const handleSelectPeople = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value;
-    if (id && !selectedPeopleIds.map(i => String(i)).includes(String(id))) {
-      setSelectedPeopleIds([...selectedPeopleIds, id]);
-    }
-    e.target.value = "";
-  };
-
-  const handleSelectEvent = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value;
-    if (id && !selectedEventIds.map(i => String(i)).includes(String(id))) {
-      setSelectedEventIds([...selectedEventIds, id]);
-    }
-    e.target.value = "";
-  };
-
-  const handleAddPeopleName = () => {
-    const trimmed = newPeopleName.trim();
-    if (trimmed && !addedPeopleNames.includes(trimmed)) {
-      if (tags.some(t => t.name === trimmed)) {
-        alert("そのタグは既に存在します。プルダウンから選択してください。");
-        return;
-      }
-      setAddedPeopleNames([...addedPeopleNames, trimmed]);
-      setNewPeopleName("");
-    }
-  };
-
-  const handleAddEventName = () => {
-    const trimmed = newEventName.trim();
-    if (trimmed && !addedEventNames.includes(trimmed)) {
-      if (tags.some(t => t.name === trimmed)) {
-        alert("そのタグは既に存在します。プルダウンから選択してください。");
-        return;
-      }
-      setAddedEventNames([...addedEventNames, trimmed]);
-      setNewEventName("");
-    }
-  };
-
   const closeModal = () => {
     setIsOpen(false);
     setPreviewUrl(null);
@@ -103,10 +80,8 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
     setSelectedEventIds([]);
     setAddedPeopleNames([]);
     setAddedEventNames([]);
-    setIsCreatingPeople(false);
-    setIsCreatingEvent(false);
-    setNewPeopleName("");
-    setNewEventName("");
+    setPeopleInput("");
+    setEventInput("");
     setIsSubmitting(false);
   };
 
@@ -118,7 +93,7 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
     try {
       setIsSubmitting(true);
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error("ユーザー認証情報の取得に失敗しました。再度ログインしてください。");
+      if (userError || !user) throw new Error("ユーザー認証情報の取得に失敗しました。");
 
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
@@ -138,133 +113,189 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
       if (newPost) {
         const finalTagIds = [...selectedPeopleIds, ...selectedEventIds];
         
-        const currentPeopleNames = [...addedPeopleNames];
-        if (newPeopleName.trim() && !currentPeopleNames.includes(newPeopleName.trim()) && !tags.some(t => t.name === newPeopleName.trim())) {
-          currentPeopleNames.push(newPeopleName.trim());
-        }
-        for (const name of currentPeopleNames) {
-          const { data: tagData, error: tagError } = await supabase.from('tags').upsert({ name: name, type: 'people' }, { onConflict: 'name' }).select().single();
-          if (tagError) throw tagError;
+        // 人物新規保存
+        for (const name of addedPeopleNames) {
+          const { data: tagData } = await supabase.from('tags').upsert({ name, type: 'people' }, { onConflict: 'name' }).select().single();
           if (tagData) finalTagIds.push(tagData.id);
         }
-
-        const currentEventNames = [...addedEventNames];
-        if (newEventName.trim() && !currentEventNames.includes(newEventName.trim()) && !tags.some(t => t.name === newEventName.trim())) {
-          currentEventNames.push(newEventName.trim());
-        }
-        for (const name of currentEventNames) {
-          const { data: tagData, error: tagError } = await supabase.from('tags').upsert({ name: name, type: 'event' }, { onConflict: 'name' }).select().single();
-          if (tagError) throw tagError;
+        // イベント新規保存
+        for (const name of addedEventNames) {
+          const { data: tagData } = await supabase.from('tags').upsert({ name, type: 'event' }, { onConflict: 'name' }).select().single();
           if (tagData) finalTagIds.push(tagData.id);
         }
 
         for (const tagId of finalTagIds) {
-          const { error: ptError } = await supabase.from('post_tags').insert({ post_id: newPost.id, tag_id: tagId });
-          if (ptError) throw ptError; 
+          await supabase.from('post_tags').insert({ post_id: newPost.id, tag_id: tagId });
         }
       }
       closeModal();
       onSuccess(); 
     } catch (error: any) {
-      console.error("保存エラーの詳細:", error);
-      alert(`保存に失敗しました。詳細: ${error.message}`);
+      alert(`保存に失敗しました。: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // --- タグ選択ロジック ---
+  const toggleSelection = (id: string, type: 'people' | 'event') => {
+    if (type === 'people') {
+      setSelectedPeopleIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+      setPeopleInput("");
+      setShowPeopleList(false);
+    } else {
+      setSelectedEventIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+      setEventInput("");
+      setShowEventList(false);
+    }
+  };
+
+  const createNewTag = (name: string, type: 'people' | 'event') => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (type === 'people') {
+      if (!addedPeopleNames.includes(trimmed)) setAddedPeopleNames([...addedPeopleNames, trimmed]);
+      setPeopleInput("");
+      setShowPeopleList(false);
+    } else {
+      if (!addedEventNames.includes(trimmed)) setAddedEventNames([...addedEventNames, trimmed]);
+      setEventInput("");
+      setShowEventList(false);
+    }
+  };
+
   return (
     <>
-      {/* ★ 改修：ボタンテキストを「＋ 新規」に */}
       <button onClick={() => setIsOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-full shadow-md hover:bg-gray-700 transition font-bold text-sm">
         ＋ 新規
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-2 sm:p-4">
-          
-          {/* ★ 改修：白枠の内側の余白(p-8)を消し、ヘッダーとフッターにだけ余白を付けることでスクロールバーを右端に密着させる */}
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col py-4 sm:py-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-2">
+          {/* ★ dvh と 85dvh でスマホのキーボードやかぶりを防止 */}
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85dvh] flex flex-col py-4 sm:py-6 relative">
             
             <h2 className="text-xl sm:text-2xl font-bold mb-4 px-4 sm:px-8 text-gray-900 flex-shrink-0">新しい思い出を登録</h2>
             
-            {/* スクロール領域。中身に px-4 sm:px-8 を付けて余白を確保し、バー自体は枠の右端に出るようにした */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 overflow-y-auto px-4 sm:px-8 pb-2">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 overflow-y-auto px-4 sm:px-8 pb-4">
               
+              {/* 【左カラム】 */}
               <div className="md:col-span-5 flex flex-col gap-4">
-                <div className="aspect-[3/4] w-full max-w-[240px] mx-auto bg-gray-100 flex items-center justify-center overflow-hidden rounded border border-gray-200 shadow-inner flex-shrink-0">
-                  {previewUrl ? <img src={previewUrl} alt="プレビュー" className="w-full h-full object-cover" /> : <span className="text-gray-400 text-sm">画像を選択してください</span>}
+                <div className="aspect-[3/4] w-full max-w-[200px] mx-auto bg-gray-100 flex items-center justify-center overflow-hidden rounded border border-gray-200 shadow-inner flex-shrink-0">
+                  {previewUrl ? <img src={previewUrl} alt="プレビュー" className="w-full h-full object-cover" /> : <span className="text-gray-400 text-sm">画像を選択</span>}
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">写真を選択</label>
-                  <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm text-gray-900 file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-gray-100 file:text-gray-700 flex-shrink-0 cursor-pointer" />
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Photo</label>
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs text-gray-900 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-bold file:bg-gray-100 file:text-gray-700 cursor-pointer" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between">
-                    思い出の日付
-                    <span className="text-gray-400 font-normal">写真から自動取得・修正可</span>
-                  </label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-800 text-sm bg-white text-gray-900 font-medium" />
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</label>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-inset focus:ring-gray-800 text-sm bg-white" />
                 </div>
               </div>
 
-              <div className="md:col-span-7 flex flex-col gap-5">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1"><span>👤</span> 人物タグ (Who)</label>
-                  <div className="flex gap-2 items-center">
-                    <select onChange={handleSelectPeople} className="flex-1 border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-blue-500 text-sm bg-white text-gray-900 font-medium">
-                      <option value="">-- 既存の人物から選択 --</option>
-                      {tags.filter(t => t.type === 'people').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                    <button type="button" onClick={() => setIsCreatingPeople(!isCreatingPeople)} className="bg-gray-100 border border-gray-300 p-2 rounded-md text-sm font-bold px-3">{isCreatingPeople ? "×" : "＋"}</button>
+              {/* 【右カラム：Notion風タグ】 */}
+              <div className="md:col-span-7 flex flex-col gap-6">
+                
+                {/* 人物タグ */}
+                <div className="flex flex-col gap-1.5 relative" ref={peopleRef}>
+                  <label className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">👤 Who (People)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-1">
+                    {selectedPeopleIds.map(id => {
+                      const t = tags.find(tag => String(tag.id) === String(id));
+                      return t && (
+                        <span key={id} className="inline-flex items-center bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                          #{t.name} <button onClick={() => setSelectedPeopleIds(prev => prev.filter(i => i !== id))} className="ml-1 text-blue-200 hover:text-white">×</button>
+                        </span>
+                      );
+                    })}
+                    {addedPeopleNames.map(name => (
+                      <span key={name} className="inline-flex items-center bg-cyan-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                        #{name} (新) <button onClick={() => setAddedPeopleNames(prev => prev.filter(n => n !== name))} className="ml-1 text-cyan-200 hover:text-white">×</button>
+                      </span>
+                    ))}
                   </div>
-                  {isCreatingPeople && (
-                    <div className="flex gap-2 bg-blue-50/50 p-2 rounded border border-blue-100 flex-shrink-0">
-                      <input type="text" placeholder="新しい人の名前 (Enterで追加)" value={newPeopleName} onChange={(e) => setNewPeopleName(e.target.value)} onKeyDown={(e) => { if(!e.nativeEvent.isComposing && e.key === 'Enter') { e.preventDefault(); handleAddPeopleName(); } }} className="flex-1 border border-gray-300 p-1.5 text-sm rounded bg-white text-gray-900 placeholder-gray-400" />
-                      <button type="button" onClick={handleAddPeopleName} className="bg-blue-600 text-white text-xs px-3 rounded font-bold">追加</button>
-                    </div>
-                  )}
-                  {(selectedPeopleIds.length > 0 || addedPeopleNames.length > 0) && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-blue-50/20 rounded border border-blue-50 flex-shrink-0">
-                      {selectedPeopleIds.map(id => { const t = tags.find(tag => String(tag.id) === String(id)); return t ? <span key={String(id)} className="inline-flex items-center bg-blue-600 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">#{t.name}<button type="button" onClick={() => setSelectedPeopleIds(selectedPeopleIds.filter(i => i !== id))} className="ml-1 font-bold">×</button></span> : null; })}
-                      {addedPeopleNames.map(name => <span key={name} className="inline-flex items-center bg-cyan-600 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">#{name} (新)<button type="button" onClick={() => setAddedPeopleNames(addedPeopleNames.filter(n => n !== name))} className="ml-1 font-bold">×</button></span>)}
+                  <input 
+                    type="text" 
+                    placeholder="名前を検索、または入力して追加..."
+                    value={peopleInput}
+                    onFocus={() => setShowPeopleList(true)}
+                    onChange={(e) => setPeopleInput(e.target.value)}
+                    className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  {showPeopleList && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (
+                        <button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center">
+                          <span>#{t.name}</span>
+                          {selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}
+                        </button>
+                      ))}
+                      {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === peopleInput.trim()) && (
+                        <button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">
+                          ✨ "{peopleInput}" を新しく追加する
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1"><span>🏷️</span> イベントタグ (What / Where)</label>
-                  <div className="flex gap-2 items-center">
-                    <select onChange={handleSelectEvent} className="flex-1 border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-green-500 text-sm bg-white text-gray-900 font-medium">
-                      <option value="">-- 既存のイベントから選択 --</option>
-                      {tags.filter(t => t.type === 'event').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                    <button type="button" onClick={() => setIsCreatingEvent(!isCreatingEvent)} className="bg-gray-100 border border-gray-300 p-2 rounded-md text-sm font-bold px-3">{isCreatingEvent ? "×" : "＋"}</button>
+                {/* イベントタグ */}
+                <div className="flex flex-col gap-1.5 relative" ref={eventRef}>
+                  <label className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1">🏷️ What / Where (Event)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-1">
+                    {selectedEventIds.map(id => {
+                      const t = tags.find(tag => String(tag.id) === String(id));
+                      return t && (
+                        <span key={id} className="inline-flex items-center bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                          #{t.name} <button onClick={() => setSelectedEventIds(prev => prev.filter(i => i !== id))} className="ml-1 text-green-200 hover:text-white">×</button>
+                        </span>
+                      );
+                    })}
+                    {addedEventNames.map(name => (
+                      <span key={name} className="inline-flex items-center bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                        #{name} (新) <button onClick={() => setAddedEventNames(prev => prev.filter(n => n !== name))} className="ml-1 text-emerald-200 hover:text-white">×</button>
+                      </span>
+                    ))}
                   </div>
-                  {isCreatingEvent && (
-                    <div className="flex gap-2 bg-green-50/50 p-2 rounded border border-green-100 flex-shrink-0">
-                      <input type="text" placeholder="新しいイベント名 (Enterで追加)" value={newEventName} onChange={(e) => setNewEventName(e.target.value)} onKeyDown={(e) => { if(!e.nativeEvent.isComposing && e.key === 'Enter') { e.preventDefault(); handleAddEventName(); } }} className="flex-1 border border-gray-300 p-1.5 text-sm rounded bg-white text-gray-900 placeholder-gray-400" />
-                      <button type="button" onClick={handleAddEventName} className="bg-green-600 text-white text-xs px-3 rounded font-bold">追加</button>
-                    </div>
-                  )}
-                  {(selectedEventIds.length > 0 || addedEventNames.length > 0) && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-green-50/20 rounded border border-green-50 flex-shrink-0">
-                      {selectedEventIds.map(id => { const t = tags.find(tag => String(tag.id) === String(id)); return t ? <span key={String(id)} className="inline-flex items-center bg-green-600 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">#{t.name}<button type="button" onClick={() => setSelectedEventIds(selectedEventIds.filter(i => i !== id))} className="ml-1 font-bold">×</button></span> : null; })}
-                      {addedEventNames.map(name => <span key={name} className="inline-flex items-center bg-emerald-600 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">#{name} (新)<button type="button" onClick={() => setAddedEventNames(addedEventNames.filter(n => n !== name))} className="ml-1 font-bold">×</button></span>)}
+                  <input 
+                    type="text" 
+                    placeholder="イベントを検索、または入力して追加..."
+                    value={eventInput}
+                    onFocus={() => setShowEventList(true)}
+                    onChange={(e) => setEventInput(e.target.value)}
+                    className="w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  />
+                  {showEventList && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {tags.filter(t => t.type === 'event' && t.name.includes(eventInput)).map(t => (
+                        <button key={t.id} onClick={() => toggleSelection(t.id, 'event')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center">
+                          <span>#{t.name}</span>
+                          {selectedEventIds.includes(t.id) && <span className="text-green-600 text-xs">✓</span>}
+                        </button>
+                      ))}
+                      {eventInput.trim() && !tags.some(t => t.type === 'event' && t.name === eventInput.trim()) && (
+                        <button onClick={() => createNewTag(eventInput, 'event')} className="w-full text-left px-4 py-3 text-sm text-green-600 font-bold bg-green-50 hover:bg-green-100 border-t border-green-100">
+                          ✨ "{eventInput}" を新しく追加する
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
 
+                {/* コメント */}
                 <div className="flex flex-col gap-1.5 flex-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">コメント</label>
-                  <textarea placeholder="その日の出来事やプレゼントのメモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full max-w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-800 text-gray-900 placeholder-gray-400 bg-white font-medium flex-1 min-h-[120px]" />
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Comment</label>
+                  <textarea placeholder="メモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border border-gray-300 p-3 rounded-lg text-sm focus:ring-2 focus:ring-inset focus:ring-gray-800 bg-white flex-1 min-h-[100px]" />
                 </div>
+
               </div>
             </div>
             
-            <div className="flex justify-end gap-3 pt-4 mt-2 border-t border-gray-100 flex-shrink-0 px-4 sm:px-8">
-              <button onClick={closeModal} disabled={isSubmitting} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition font-bold text-sm">キャンセル</button>
-              <button onClick={handleSubmit} disabled={isSubmitting} className="px-7 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition flex items-center font-bold text-sm">
+            {/* ボタン */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 px-6 sm:px-8 flex-shrink-0">
+              <button onClick={closeModal} disabled={isSubmitting} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-bold text-xs">キャンセル</button>
+              <button onClick={handleSubmit} disabled={isSubmitting} className="px-8 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition font-bold text-xs">
                 {isSubmitting ? "保存中..." : "保存する"}
               </button>
             </div>
