@@ -24,7 +24,6 @@ export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   
-  // 3軸のフィルター状態管理
   const [selectedPeopleId, setSelectedPeopleId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>(""); 
@@ -33,10 +32,7 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // ギャラリー（全画面表示）の状態管理
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-
-  // スマホのスワイプ操作用
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
 
@@ -98,29 +94,23 @@ export default function Home() {
 
   const signOut = async () => { await supabase.auth.signOut(); };
 
-  // --- 削除ロジック ---
   const handleDelete = async (post: Post) => {
     if (!confirm("この思い出を完全に削除してもよろしいですか？")) return;
     try {
-      // 1. 中間テーブルの削除
       await supabase.from('post_tags').delete().eq('post_id', post.id);
-      // 2. 投稿の削除
       await supabase.from('posts').delete().eq('id', post.id);
-      // 3. ストレージから画像を削除
       const fileName = post.image_url.split('/').pop();
       if (fileName) {
         await supabase.storage.from('photos').remove([fileName]);
       }
-      // 4. ステート更新
       setPosts(posts.filter(p => p.id !== post.id));
-      setSelectedIndex(null); // モーダルを閉じる
+      setSelectedIndex(null);
     } catch (error) {
       console.error(error);
       alert("削除に失敗しました。");
     }
   };
 
-  // --- ギャラリー操作ロジック ---
   const handlePrev = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (selectedIndex !== null && selectedIndex > 0) setSelectedIndex(selectedIndex - 1);
@@ -131,7 +121,6 @@ export default function Home() {
   };
   const handleClose = () => setSelectedIndex(null);
 
-  // 時期フィルターの選択肢生成
   const timeOptions: { label: string; value: string }[] = [];
   const yearSet = new Set<string>();
   const yearMonthSet = new Set<string>();
@@ -148,7 +137,6 @@ export default function Home() {
     });
   });
 
-  // フィルター実行
   const filteredPosts = posts.filter(post => {
     if (selectedPeopleId && !post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedPeopleId))) return false;
     if (selectedEventId && !post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedEventId))) return false;
@@ -160,13 +148,11 @@ export default function Home() {
     setSelectedPeopleId(""); setSelectedEventId(""); setSelectedTime("");
   };
 
-  // 背景スクロール禁止
   useEffect(() => {
     document.body.style.overflow = selectedIndex !== null ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [selectedIndex]);
 
-  // キーボード操作
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedIndex === null) return;
@@ -199,7 +185,6 @@ export default function Home() {
           <NewPostModal onSuccess={fetchData} tags={tags} />
         </div>
 
-        {/* フィルターエリア */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 sm:mb-10 bg-slate-800 border border-slate-700 p-3 sm:p-4 rounded-none shadow-lg text-sm">
           <div className="flex justify-between items-center">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
@@ -233,7 +218,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* タイムライン */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-8">
           {filteredPosts.map((post, index) => (
             <div key={post.id} className="bg-white p-2 pb-14 sm:p-4 sm:pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 sm:hover:-translate-y-2 transition-all duration-300 relative rounded-none">
@@ -266,11 +250,28 @@ export default function Home() {
           >
             <img src={filteredPosts[selectedIndex].image_url} className="max-w-full max-h-[100dvh] object-contain pointer-events-none" />
             
-            <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex gap-3 z-50">
-              {/* 削除ボタン */}
-              <button onClick={(e) => { e.stopPropagation(); handleDelete(filteredPosts[selectedIndex]); }} className="bg-red-600 text-white p-3 rounded-none shadow-xl hover:bg-red-700 transition">🗑️</button>
-              {/* 閉じるボタン */}
-              <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="text-white bg-black bg-opacity-40 hover:bg-opacity-60 p-3 rounded-none transition">✕</button>
+            {/* ★ 改修：コントロールエリアを透過SVGアイコンに変更！ */}
+            <div className="absolute top-4 sm:top-6 right-4 sm:right-6 flex gap-2 sm:gap-3 z-50">
+              {/* 削除ボタン（SVG） */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleDelete(filteredPosts[selectedIndex]); }} 
+                title="削除"
+                className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-red-500 transition-all duration-300 rounded-none backdrop-blur-sm"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+              </button>
+              {/* 閉じるボタン（SVG） */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleClose(); }} 
+                title="閉じる"
+                className="p-2 sm:p-3 bg-black/40 hover:bg-black/70 text-white/70 hover:text-white transition-all duration-300 rounded-none backdrop-blur-sm"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             {/* 情報オーバーレイ */}
