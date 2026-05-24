@@ -14,19 +14,15 @@ interface Post {
 }
 interface Tag { id: string; name: string; type: string; }
 
-// ==========================================
-// ★ あなたのGoogleアカウント
-// ==========================================
 const ALLOWED_ADMIN_EMAIL = "yuno.crescent25@gmail.com"; 
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   
-  // 3軸のフィルター状態管理（人物・イベント・時期）
   const [selectedPeopleId, setSelectedPeopleId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
-  const [selectedTime, setSelectedTime] = useState<string>(""); // "2026" や "2026-05" が入る
+  const [selectedTime, setSelectedTime] = useState<string>(""); 
   
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
@@ -88,42 +84,30 @@ export default function Home() {
     });
   };
 
-  const signOut = async () => { await supabase.auth.signOut(); };
-
-  // ==========================================
-  // ★ 動的な「年月プルダウン」の選択肢を生成するロジック
-  // ==========================================
   const timeOptions: { label: string; value: string }[] = [];
   const yearSet = new Set<string>();
   const yearMonthSet = new Set<string>();
 
   posts.forEach(post => {
     if (post.date) {
-      const yyyy = post.date.substring(0, 4); // 例: "2026"
-      const yyyyMm = post.date.substring(0, 7); // 例: "2026-05"
+      const yyyy = post.date.substring(0, 4); 
+      const yyyyMm = post.date.substring(0, 7); 
       yearSet.add(yyyy);
       yearMonthSet.add(yyyyMm);
     }
   });
 
-  // 年の降順（新しい順）で並び替え
   Array.from(yearSet).sort().reverse().forEach(year => {
     timeOptions.push({ label: `${year}年 (すべて)`, value: year });
-    
-    // その年に属する月だけを取り出して、降順で並び替えて直下に追加
     Array.from(yearMonthSet)
       .filter(ym => ym.startsWith(year))
       .sort().reverse()
       .forEach(ym => {
         const month = ym.substring(5, 7);
-        // 見やすくするために先頭に全角スペースを入れてインデント（字下げ）を表現
         timeOptions.push({ label: ` ${year}.${month}`, value: ym }); 
       });
   });
 
-  // ==========================================
-  // フィルター処理（3つの掛け合わせ AND検索）
-  // ==========================================
   const filteredPosts = posts.filter(post => {
     if (selectedPeopleId) {
       const hasPeople = post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedPeopleId));
@@ -133,7 +117,6 @@ export default function Home() {
       const hasEvent = post.post_tags?.some(pt => String(pt.tags?.id) === String(selectedEventId));
       if (!hasEvent) return false;
     }
-    // ★ 時期フィルター（startsWithを使うことで、"2026"なら2026年全部、"2026-05"なら5月だけにヒットする魔法！）
     if (selectedTime) {
       if (!post.date || !post.date.startsWith(selectedTime)) return false;
     }
@@ -152,7 +135,7 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2 tracking-wider">My Cheki App</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2 tracking-wider">Cheki</h1>
           <p className="text-sm text-gray-500 mb-6">思い出を記録するプライベート空間</p>
           {authError && (
             <div className="bg-red-50 text-red-600 text-xs font-semibold p-3 rounded-xl mb-6 border border-red-200 text-left leading-relaxed animate-pulse">⚠️ {authError}</div>
@@ -166,54 +149,57 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
+    <main className="min-h-screen bg-gray-100 p-4 sm:p-8">
       <div className="max-w-5xl mx-auto">
+        
+        {/* ★ 改修：ヘッダーをスッキリ化（ログアウト削除、タイトル変更） */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 tracking-wider">My Cheki App</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-wider">Cheki</h1>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 font-medium hidden sm:inline">{session.user.email}</span>
             <NewPostModal onSuccess={fetchData} tags={tags} />
-            <button onClick={signOut} className="text-sm font-medium text-gray-500 hover:text-gray-800 underline transition">ログアウト</button>
           </div>
         </div>
 
-        {/* フィルターUI（3軸） */}
-        <div className="flex flex-wrap gap-4 mb-8 items-center bg-white p-4 rounded-xl shadow-sm text-sm">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Filter:</span>
+        {/* ★ 改修：スマホでは縦並び・左揃え、PCでは横並びのフィルターUI */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-8 bg-white p-4 rounded-xl shadow-sm text-sm">
           
-          {/* 時期プルダウン（動的生成） */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">📅</span>
-            <select 
-              value={selectedTime} 
-              onChange={(e) => setSelectedTime(e.target.value)}
-              className="border border-gray-300 p-1.5 rounded-md bg-gray-50 text-gray-700 focus:outline-none font-medium text-xs min-w-[120px]"
-            >
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Filter:</span>
+            {/* スマホ用リセットボタン（右上に配置） */}
+            {(selectedPeopleId || selectedEventId || selectedTime) && (
+              <button onClick={handleResetFilter} className="sm:hidden text-xs font-bold text-red-500 hover:text-red-700 underline transition">
+                🔄 リセット
+              </button>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 w-5 text-center">📅</span>
+            <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="flex-1 sm:w-auto border border-gray-300 p-2 rounded-md bg-gray-50 text-gray-700 focus:outline-none font-medium text-xs">
               <option value="">すべての時期</option>
-              {timeOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
+              {timeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">👤</span>
-            <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="border border-gray-300 p-1.5 rounded-md bg-gray-50 text-gray-700 focus:outline-none font-medium text-xs min-w-[120px]">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 w-5 text-center">👤</span>
+            <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="flex-1 sm:w-auto border border-gray-300 p-2 rounded-md bg-gray-50 text-gray-700 focus:outline-none font-medium text-xs">
               <option value="">すべての人物</option>
               {tags.filter(t => t.type === 'people').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">🏷️</span>
-            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="border border-gray-300 p-1.5 rounded-md bg-gray-50 text-gray-700 focus:outline-none font-medium text-xs min-w-[120px]">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 w-5 text-center">🏷️</span>
+            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="flex-1 sm:w-auto border border-gray-300 p-2 rounded-md bg-gray-50 text-gray-700 focus:outline-none font-medium text-xs">
               <option value="">すべてのイベント</option>
               {tags.filter(t => t.type === 'event').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
           </div>
 
+          {/* PC用リセットボタン（右端に配置） */}
           {(selectedPeopleId || selectedEventId || selectedTime) && (
-            <button onClick={handleResetFilter} className="text-xs font-bold text-red-500 hover:text-red-700 underline ml-auto transition">
+            <button onClick={handleResetFilter} className="hidden sm:block text-xs font-bold text-red-500 hover:text-red-700 underline ml-auto transition">
               🔄 フィルターをリセット
             </button>
           )}

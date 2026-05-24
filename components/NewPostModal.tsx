@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-// ★ Exif解析ライブラリをインポート
 import exifr from 'exifr';
 
 interface Tag {
@@ -34,26 +33,21 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
   const [newPeopleName, setNewPeopleName] = useState("");
   const [newEventName, setNewEventName] = useState("");
 
-  // ★ 画像選択時にExifデータを解析して日付を自動セットするロジック
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
       setPreviewUrl(URL.createObjectURL(selectedFile));
-
       try {
-        // 写真のデータを解析して撮影日(DateTimeOriginal)を抽出
         const exifData = await exifr.parse(selectedFile);
         if (exifData && exifData.DateTimeOriginal) {
           const dateObj = new Date(exifData.DateTimeOriginal);
           const yyyy = dateObj.getFullYear();
           const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
           const dd = String(dateObj.getDate()).padStart(2, '0');
-          // 撮影日が見つかったら、カレンダーに自動入力
           setDate(`${yyyy}-${mm}-${dd}`);
         }
       } catch (error) {
-        // Exifがない画像（スクショやLINEで保存した画像など）の場合は何もしない（今日の日付のまま）
         console.log("Exifデータの取得をスキップしました");
       }
     }
@@ -121,14 +115,10 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
       alert("画像を選択してください");
       return;
     }
-
     try {
       setIsSubmitting(true);
-
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error("ユーザー認証情報の取得に失敗しました。再度ログインしてください。");
-      }
+      if (userError || !user) throw new Error("ユーザー認証情報の取得に失敗しました。再度ログインしてください。");
 
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
@@ -136,17 +126,12 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage.from('photos').getPublicUrl(fileName);
-
-      const { data: newPost, error: insertError } = await supabase
-        .from('posts')
-        .insert({
+      const { data: newPost, error: insertError } = await supabase.from('posts').insert({
           user_id: user.id,
           image_url: publicUrlData.publicUrl,
           comment: comment,
           date: date,
-        })
-        .select()
-        .single();
+        }).select().single();
 
       if (insertError) throw insertError;
 
@@ -158,10 +143,7 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
           currentPeopleNames.push(newPeopleName.trim());
         }
         for (const name of currentPeopleNames) {
-          const { data: tagData, error: tagError } = await supabase
-            .from('tags')
-            .upsert({ name: name, type: 'people' }, { onConflict: 'name' })
-            .select().single();
+          const { data: tagData, error: tagError } = await supabase.from('tags').upsert({ name: name, type: 'people' }, { onConflict: 'name' }).select().single();
           if (tagError) throw tagError;
           if (tagData) finalTagIds.push(tagData.id);
         }
@@ -171,26 +153,18 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
           currentEventNames.push(newEventName.trim());
         }
         for (const name of currentEventNames) {
-          const { data: tagData, error: tagError } = await supabase
-            .from('tags')
-            .upsert({ name: name, type: 'event' }, { onConflict: 'name' })
-            .select().single();
+          const { data: tagData, error: tagError } = await supabase.from('tags').upsert({ name: name, type: 'event' }, { onConflict: 'name' }).select().single();
           if (tagError) throw tagError;
           if (tagData) finalTagIds.push(tagData.id);
         }
 
         for (const tagId of finalTagIds) {
-          const { error: ptError } = await supabase.from('post_tags').insert({
-            post_id: newPost.id,
-            tag_id: tagId
-          });
+          const { error: ptError } = await supabase.from('post_tags').insert({ post_id: newPost.id, tag_id: tagId });
           if (ptError) throw ptError; 
         }
       }
-
       closeModal();
       onSuccess(); 
-
     } catch (error: any) {
       console.error("保存エラーの詳細:", error);
       alert(`保存に失敗しました。詳細: ${error.message}`);
@@ -201,16 +175,21 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
 
   return (
     <>
-      <button onClick={() => setIsOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-full shadow-md hover:bg-gray-700 transition">
-        ＋ 新しい思い出
+      {/* ★ 改修：ボタンテキストを「＋ 新規」に */}
+      <button onClick={() => setIsOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-full shadow-md hover:bg-gray-700 transition font-bold text-sm">
+        ＋ 新規
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl p-8 text-gray-900 max-h-[95vh] flex flex-col">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900 flex-shrink-0">新しい思い出を登録</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-2 sm:p-4">
+          
+          {/* ★ 改修：白枠の内側の余白(p-8)を消し、ヘッダーとフッターにだけ余白を付けることでスクロールバーを右端に密着させる */}
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col py-4 sm:py-6">
             
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-8 overflow-y-auto pr-2 pb-2 mb-4">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 px-4 sm:px-8 text-gray-900 flex-shrink-0">新しい思い出を登録</h2>
+            
+            {/* スクロール領域。中身に px-4 sm:px-8 を付けて余白を確保し、バー自体は枠の右端に出るようにした */}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 overflow-y-auto px-4 sm:px-8 pb-2">
               
               <div className="md:col-span-5 flex flex-col gap-4">
                 <div className="aspect-[3/4] w-full max-w-[240px] mx-auto bg-gray-100 flex items-center justify-center overflow-hidden rounded border border-gray-200 shadow-inner flex-shrink-0">
@@ -223,7 +202,6 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between">
                     思い出の日付
-                    {/* Exifがない場合のために入力できることも明示 */}
                     <span className="text-gray-400 font-normal">写真から自動取得・修正可</span>
                   </label>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-800 text-sm bg-white text-gray-900 font-medium" />
@@ -231,7 +209,6 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
               </div>
 
               <div className="md:col-span-7 flex flex-col gap-5">
-                
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1"><span>👤</span> 人物タグ (Who)</label>
                   <div className="flex gap-2 items-center">
@@ -282,11 +259,10 @@ export default function NewPostModal({ onSuccess, tags }: NewPostModalProps) {
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">コメント</label>
                   <textarea placeholder="その日の出来事やプレゼントのメモを自由に記入..." value={comment} onChange={(e) => setComment(e.target.value)} className="w-full max-w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-800 text-gray-900 placeholder-gray-400 bg-white font-medium flex-1 min-h-[120px]" />
                 </div>
-
               </div>
             </div>
             
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 flex-shrink-0">
+            <div className="flex justify-end gap-3 pt-4 mt-2 border-t border-gray-100 flex-shrink-0 px-4 sm:px-8">
               <button onClick={closeModal} disabled={isSubmitting} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition font-bold text-sm">キャンセル</button>
               <button onClick={handleSubmit} disabled={isSubmitting} className="px-7 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition flex items-center font-bold text-sm">
                 {isSubmitting ? "保存中..." : "保存する"}
