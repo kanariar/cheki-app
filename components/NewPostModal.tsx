@@ -34,9 +34,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
   const [pickerSessionId, setPickerSessionId] = useState<string | null>(null);
   const [isWaitingPicker, setIsWaitingPicker] = useState(false);
 
-  // =================================================================
-  // ★ 追加：リロード対策（戻ってきた時に自動で画面を復元する）
-  // =================================================================
+  // 一時保存データの復元
   useEffect(() => {
     if (googleToken) {
       const savedDraft = localStorage.getItem('cheki_draft');
@@ -44,7 +42,6 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
         try {
           const draft = JSON.parse(savedDraft);
           if (draft.pickerSessionId) {
-            // 一時保存データがあったら、自動でモーダルを開いて復元する
             setIsOpen(true);
             setComment(draft.comment || "");
             if (draft.date) setDate(draft.date);
@@ -76,9 +73,6 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
       const sessionId = data.id;
       setPickerSessionId(sessionId);
       
-      // =================================================================
-      // ★ 追加：別タブに行く直前に、全入力データをローカルストレージに退避！
-      // =================================================================
       const draft = {
           comment,
           date,
@@ -98,6 +92,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
     }
   };
 
+  // Googleでの写真選択を待つポーリング処理
   useEffect(() => {
     if (!isWaitingPicker || !pickerSessionId || !googleToken) return;
 
@@ -126,15 +121,14 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
             setPreviewUrl(URL.createObjectURL(googleFile));
             setImagePosition(50);
             
-            // 撮影日時の自動セット
-            if (photo.mediaMetadata?.creationTime) {
-                setDate(photo.mediaMetadata.creationTime.split('T')[0]);
+            // ★ 修正：新しいAPIのルールに合わせて日付の取得方法を変更
+            if (photo.createTime) {
+                setDate(photo.createTime.split('T')[0]);
             }
 
             setIsWaitingPicker(false);
             setPickerSessionId(null);
             
-            // ★ 写真が無事にセットされたら、用済みの退避データを削除
             localStorage.removeItem('cheki_draft');
           }
         }
@@ -143,7 +137,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
       }
     };
 
-    checkSession(); // すぐに一回確認する
+    checkSession(); 
     const interval = setInterval(checkSession, 3000);
 
     return () => clearInterval(interval);
@@ -185,7 +179,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
     setIsOpen(false); setPreviewUrl(null); setFile(null); setComment(""); setDate(new Date().toISOString().split('T')[0]); 
     setImagePosition(50); setSelectedPeopleIds([]); setSelectedEventIds([]); setAddedPeopleNames([]); setAddedEventNames([]);
     setPeopleInput(""); setEventInput(""); setIsSubmitting(false); setIsWaitingPicker(false); setPickerSessionId(null);
-    localStorage.removeItem('cheki_draft'); // 閉じる時も消す
+    localStorage.removeItem('cheki_draft');
   };
 
   const handleSubmit = async () => {
@@ -285,7 +279,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                   {showPeopleList && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-none shadow-xl max-h-48 overflow-y-auto">
                       {tags.filter(t => t.type === 'people' && t.name.includes(peopleInput)).map(t => (<button key={t.id} onClick={() => toggleSelection(t.id, 'people')} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex justify-between items-center"><span>#{t.name}</span>{selectedPeopleIds.includes(t.id) && <span className="text-blue-600 text-xs">✓</span>}</button>))}
-                      {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === peopleInput.trim()) && (<button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{peopleInput}" を新しく追加する</button>)}
+                      {peopleInput.trim() && !tags.some(t => t.type === 'people' && t.name === input.trim()) && (<button onClick={() => createNewTag(peopleInput, 'people')} className="w-full text-left px-4 py-3 text-sm text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border-t border-blue-100">✨ "{peopleInput}" を新しく追加する</button>)}
                     </div>
                   )}
                 </div>

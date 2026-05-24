@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.json(await res.json());
     } else if (action === 'items') {
-      const res = await fetch(`https://photospicker.googleapis.com/v1/sessions/${sessionId}/mediaItems`, {
+      // ★ 修正：最新の仕様に合わせて写真一覧の取得URLを変更しました！
+      const res = await fetch(`https://photospicker.googleapis.com/v1/mediaItems?sessionId=${sessionId}`, {
         headers: { 'Authorization': token }
       });
       return NextResponse.json(await res.json());
