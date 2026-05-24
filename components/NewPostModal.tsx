@@ -31,11 +31,37 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
   const peopleRef = useRef<HTMLDivElement>(null);
   const eventRef = useRef<HTMLDivElement>(null);
 
-  // ★ 新しいPicker API用の状態
   const [pickerSessionId, setPickerSessionId] = useState<string | null>(null);
   const [isWaitingPicker, setIsWaitingPicker] = useState(false);
 
-  // 1. Googleの公式ピッカー画面を開く
+  // =================================================================
+  // ★ 追加：リロード対策（戻ってきた時に自動で画面を復元する）
+  // =================================================================
+  useEffect(() => {
+    if (googleToken) {
+      const savedDraft = localStorage.getItem('cheki_draft');
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          if (draft.pickerSessionId) {
+            // 一時保存データがあったら、自動でモーダルを開いて復元する
+            setIsOpen(true);
+            setComment(draft.comment || "");
+            if (draft.date) setDate(draft.date);
+            setSelectedPeopleIds(draft.selectedPeopleIds || []);
+            setSelectedEventIds(draft.selectedEventIds || []);
+            setAddedPeopleNames(draft.addedPeopleNames || []);
+            setAddedEventNames(draft.addedEventNames || []);
+            setPickerSessionId(draft.pickerSessionId);
+            setIsWaitingPicker(true);
+          }
+        } catch (e) {
+          console.error("Draft parse error", e);
+        }
+      }
+    }
+  }, [googleToken]);
+
   const openGooglePicker = async () => {
     if (!googleToken) { alert("ログインし直してください"); return; }
     try {
@@ -47,9 +73,23 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || "セッション作成失敗");
 
-      setPickerSessionId(data.id);
+      const sessionId = data.id;
+      setPickerSessionId(sessionId);
       
-      // スマホの別タブ（またはポップアップ）で公式の選択画面を開く
+      // =================================================================
+      // ★ 追加：別タブに行く直前に、全入力データをローカルストレージに退避！
+      // =================================================================
+      const draft = {
+          comment,
+          date,
+          selectedPeopleIds,
+          selectedEventIds,
+          addedPeopleNames,
+          addedEventNames,
+          pickerSessionId: sessionId
+      };
+      localStorage.setItem('cheki_draft', JSON.stringify(draft));
+      
       window.open(data.pickerUri, '_blank');
       
     } catch(e: any) {
@@ -58,31 +98,26 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
     }
   };
 
-  // 2. ユーザーが別タブで選んでいる間、裏で完了をチェック（ポーリング）する
   useEffect(() => {
     if (!isWaitingPicker || !pickerSessionId || !googleToken) return;
 
-    const interval = setInterval(async () => {
+    const checkSession = async () => {
       try {
         const res = await fetch(`/api/google-photos?sessionId=${pickerSessionId}&action=status`, {
           headers: { 'Authorization': `Bearer ${googleToken}` }
         });
         const data = await res.json();
         
-        // Google「ユーザーが写真を選び終わりましたよ！」
+        // ユーザーが写真を選んで戻ってきた！
         if (data.mediaItemsSet) {
-          clearInterval(interval);
-          
           const itemsRes = await fetch(`/api/google-photos?sessionId=${pickerSessionId}&action=items`, {
             headers: { 'Authorization': `Bearer ${googleToken}` }
           });
           const itemsData = await itemsRes.json();
           
           if (itemsData.mediaItems && itemsData.mediaItems.length > 0) {
-            // 選ばれた写真をダウンロードしてアプリにセット！
             const photo = itemsData.mediaItems[0];
             const downloadUrl = `${photo.mediaFile.baseUrl}=w600-h800`;
-            
             const proxyRes = await fetch(`/api/proxy-image?url=${encodeURIComponent(downloadUrl)}`);
             const blob = await proxyRes.blob();
             const googleFile = new File([blob], "google-photo.jpg", { type: "image/jpeg" });
@@ -91,14 +126,25 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
             setPreviewUrl(URL.createObjectURL(googleFile));
             setImagePosition(50);
             
+            // 撮影日時の自動セット
+            if (photo.mediaMetadata?.creationTime) {
+                setDate(photo.mediaMetadata.creationTime.split('T')[0]);
+            }
+
             setIsWaitingPicker(false);
             setPickerSessionId(null);
+            
+            // ★ 写真が無事にセットされたら、用済みの退避データを削除
+            localStorage.removeItem('cheki_draft');
           }
         }
       } catch (e) {
         console.error("Polling error", e);
       }
-    }, 3000); // 3秒に1回、こっそりGoogleに状況を聞きにいく
+    };
+
+    checkSession(); // すぐに一回確認する
+    const interval = setInterval(checkSession, 3000);
 
     return () => clearInterval(interval);
   }, [isWaitingPicker, pickerSessionId, googleToken]);
@@ -139,6 +185,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
     setIsOpen(false); setPreviewUrl(null); setFile(null); setComment(""); setDate(new Date().toISOString().split('T')[0]); 
     setImagePosition(50); setSelectedPeopleIds([]); setSelectedEventIds([]); setAddedPeopleNames([]); setAddedEventNames([]);
     setPeopleInput(""); setEventInput(""); setIsSubmitting(false); setIsWaitingPicker(false); setPickerSessionId(null);
+    localStorage.removeItem('cheki_draft'); // 閉じる時も消す
   };
 
   const handleSubmit = async () => {
@@ -216,7 +263,7 @@ export default function NewPostModal({ onSuccess, tags, googleToken }: NewPostMo
                       className="w-full bg-blue-50 text-blue-600 border border-blue-200 py-2 text-xs font-bold hover:bg-blue-100 transition rounded-none mb-1 flex items-center justify-center gap-1.5"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.333 4.667h-5.333V10h5.333V4.667zM10 4.667H4.667V10H10V4.667zM10 14H4.667v5.333H10V14zm9.333 0h-5.333v5.333h5.333V14z"/></svg>
-                      {isWaitingPicker ? "別画面で写真を選択中..." : "Googleフォトから選ぶ (公式ツール)"}
+                      {isWaitingPicker ? "別画面で写真を選択中..." : "Googleフォトから選ぶ"}
                     </button>
                   )}
                   <input type="file" accept="image/*" onChange={handleImageChange} className="text-xs text-gray-900 file:mr-3 file:py-1.5 file:px-3 file:rounded-none file:border-0 file:text-[10px] file:font-bold file:bg-gray-100 file:text-gray-700 cursor-pointer" />
