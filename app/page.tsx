@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import NewPostModal from '../components/NewPostModal';
 
@@ -15,9 +15,6 @@ interface Post {
 }
 interface Tag { id: string; name: string; type: string; }
 
-// ==========================================
-// ★ あなたのGoogleアカウント
-// ==========================================
 const ALLOWED_ADMIN_EMAIL = "yuno.crescent25@gmail.com"; 
 
 export default function Home() {
@@ -32,7 +29,12 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  // ★ 改修：単なるURLではなく「現在開いているチェキのインデックス（順番）」を管理する
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  // ★ スマホでのスワイプ操作用の座標記録
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
 
   const fetchData = async () => {
     try {
@@ -57,7 +59,7 @@ export default function Home() {
     const checkSecurityGuard = async (currentSession: any) => {
       if (currentSession) {
         if (currentSession.user.email !== ALLOWED_ADMIN_EMAIL) {
-          setAuthError(`アクセスが拒否されました。アカウント「${currentSession.user.email}」はこのアプリの管理者ではありません。`);
+          setAuthError(`アクセスが拒否されました。`);
           await supabase.auth.signOut(); 
           setSession(null);
           return;
@@ -137,6 +139,63 @@ export default function Home() {
     setSelectedTime("");
   };
 
+  // ========================================================
+  // ★ ギャラリー（Lightbox）操作のロジック
+  // ========================================================
+
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedIndex !== null && selectedIndex > 0) {
+      setSelectedIndex(selectedIndex - 1);
+    }
+  };
+
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (selectedIndex !== null && selectedIndex < filteredPosts.length - 1) {
+      setSelectedIndex(selectedIndex + 1);
+    }
+  };
+
+  const handleClose = () => setSelectedIndex(null);
+
+  // PCでのキーボード操作（Esc, 矢印キー）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedIndex === null) return;
+      if (e.key === 'Escape') handleClose();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIndex, filteredPosts.length]);
+
+  // スマホでのスワイプ操作
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchStartX.current - touchEndX;
+    const deltaY = touchStartY.current - touchEndY;
+
+    // 横移動の方が大きい場合（左右スワイプ）
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX > 50) handleNext(); // 左にスワイプ（次へ）
+      else if (deltaX < -50) handlePrev(); // 右にスワイプ（前へ）
+    } 
+    // 縦移動の方が大きい場合（上下スワイプ）
+    else {
+      if (deltaY < -50) handleClose(); // 下にスワイプ（閉じる）
+    }
+  };
+
+  // ========================================================
+
   if (loading && session) return <div className="min-h-screen bg-slate-900 p-8 text-center text-slate-400 font-medium">読み込み中...</div>;
 
   if (!session) {
@@ -160,7 +219,6 @@ export default function Home() {
     <main className="min-h-screen bg-slate-900 p-3 sm:p-8">
       <div className="max-w-5xl mx-auto">
         
-        {/* ヘッダーエリア */}
         <div className="flex justify-between items-center mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-wider">Cheki</h1>
           <div className="flex items-center gap-3">
@@ -168,21 +226,17 @@ export default function Home() {
           </div>
         </div>
 
-        {/* フィルターエリア */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 sm:mb-10 bg-slate-800 border border-slate-700 p-3 sm:p-4 rounded-none shadow-lg text-sm">
-          
           <div className="flex justify-between items-center">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
             {(selectedPeopleId || selectedEventId || selectedTime) && (
-              <button onClick={handleResetFilter} className="sm:hidden text-[10px] sm:text-xs font-bold text-red-400 hover:text-red-300 underline transition">
-                🔄 リセット
-              </button>
+              <button onClick={handleResetFilter} className="sm:hidden text-[10px] sm:text-xs font-bold text-red-400 hover:text-red-300 underline transition">🔄 リセット</button>
             )}
           </div>
           
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-slate-400 w-4 sm:w-5 text-center text-xs sm:text-sm">📅</span>
-            <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-[10px] sm:text-xs">
+            <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white font-medium text-[10px] sm:text-xs">
               <option value="">すべての時期</option>
               {timeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
@@ -190,7 +244,7 @@ export default function Home() {
 
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-slate-400 w-4 sm:w-5 text-center text-xs sm:text-sm">👤</span>
-            <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-[10px] sm:text-xs">
+            <select value={selectedPeopleId} onChange={(e) => setSelectedPeopleId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white font-medium text-[10px] sm:text-xs">
               <option value="">すべての人物</option>
               {tags.filter(t => t.type === 'people').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
@@ -198,7 +252,7 @@ export default function Home() {
 
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="text-slate-400 w-4 sm:w-5 text-center text-xs sm:text-sm">🏷️</span>
-            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-[10px] sm:text-xs">
+            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="flex-1 sm:w-auto border border-slate-600 p-1.5 sm:p-2 rounded-none bg-slate-700 text-white font-medium text-[10px] sm:text-xs">
               <option value="">すべてのイベント</option>
               {tags.filter(t => t.type === 'event').map(tag => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
             </select>
@@ -211,14 +265,13 @@ export default function Home() {
           )}
         </div>
 
-        {/* タイムライン：スマホは grid-cols-2、PCは grid-cols-3 にし、隙間(gap)もスマホ向けに狭く */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-8">
-          {filteredPosts.map((post) => (
-            /* スマホ用の余白(p-2 pb-14)とPC用の余白(sm:p-4 sm:pb-20)を使い分け */
+          {/* ★ 改修：mapに index を渡し、クリック時にその index をセットする */}
+          {filteredPosts.map((post, index) => (
             <div key={post.id} className="bg-white p-2 pb-14 sm:p-4 sm:pb-20 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 sm:hover:-translate-y-2 transition-all duration-300 relative rounded-none">
               
               <div 
-                onClick={() => setZoomImageUrl(post.image_url)}
+                onClick={() => setSelectedIndex(index)}
                 className="aspect-[3/4] bg-gray-200 mb-2 sm:mb-4 overflow-hidden rounded-none cursor-zoom-in relative select-none"
               >
                 <img 
@@ -229,7 +282,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* コメントの文字サイズもスマホ用(text-xs)とPC用(text-lg)で可変に */}
               <div className="text-gray-800 font-medium text-xs sm:text-lg leading-relaxed mb-2 sm:mb-3 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">{post.comment}</div>
               
               <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-5 text-gray-400 font-mono text-[9px] sm:text-sm tracking-tighter italic font-bold">
@@ -248,20 +300,72 @@ export default function Home() {
         </div>
         {filteredPosts.length === 0 && <div className="text-center text-slate-400 mt-20 font-medium text-sm sm:text-base">条件に合う思い出が見つかりません。</div>}
 
-        {/* 全画面拡大表示用モーダル */}
-        {zoomImageUrl && (
+        {/* ========================================================
+            ★ ギャラリー（Lightbox）カルーセルUI
+            ======================================================== */}
+        {selectedIndex !== null && filteredPosts[selectedIndex] && (
           <div 
-            onClick={() => setZoomImageUrl(null)}
-            className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-4 cursor-zoom-out animate-fadeIn animate-duration-200"
+            onClick={handleClose}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="fixed inset-0 bg-black z-50 flex items-center justify-center animate-fadeIn select-none"
           >
+            {/* メイン写真（見切れなし・比率維持） */}
             <img 
-              src={zoomImageUrl} 
+              src={filteredPosts[selectedIndex].image_url} 
               alt="拡大画像" 
-              className="max-w-full max-h-full object-contain shadow-2xl select-none"
+              className="max-w-full max-h-[100dvh] object-contain pointer-events-none"
             />
-            <div className="absolute top-4 right-4 text-white font-bold bg-slate-800 bg-opacity-50 px-3 py-1.5 rounded-full text-xs">
-              タップして閉じる
+
+            {/* 閉じるボタン (PC/スマホ共通) */}
+            <button 
+              onClick={handleClose}
+              className="absolute top-4 sm:top-6 right-4 sm:right-6 text-white bg-black bg-opacity-40 hover:bg-opacity-60 p-2 sm:p-3 rounded-full transition z-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
+            {/* 戻る・次へボタン (PCでのみ表示、スマホはスワイプ操作のため非表示) */}
+            {selectedIndex > 0 && (
+              <button onClick={handlePrev} className="hidden sm:block absolute left-6 top-1/2 transform -translate-y-1/2 text-white bg-black bg-opacity-30 hover:bg-opacity-60 p-4 rounded-full transition">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+            )}
+            {selectedIndex < filteredPosts.length - 1 && (
+              <button onClick={handleNext} className="hidden sm:block absolute right-6 top-1/2 transform -translate-y-1/2 text-white bg-black bg-opacity-30 hover:bg-opacity-60 p-4 rounded-full transition">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </button>
+            )}
+
+            {/* 情報オーバーレイ（下部の黒いグラデーションに乗せる） */}
+            <div 
+              onClick={(e) => e.stopPropagation()} // 文字をタップしても閉じないようにする
+              className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-6 sm:p-10 pt-20"
+            >
+              <div className="max-w-3xl mx-auto flex flex-col gap-3">
+                {/* コメント */}
+                {filteredPosts[selectedIndex].comment && (
+                  <p className="text-white text-sm sm:text-lg font-medium leading-relaxed whitespace-pre-wrap">
+                    {filteredPosts[selectedIndex].comment}
+                  </p>
+                )}
+                
+                {/* 日付とタグ */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                  <span className="text-gray-300 font-mono text-sm tracking-widest font-bold">
+                    {filteredPosts[selectedIndex].date?.replace(/-/g, '.')}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filteredPosts[selectedIndex].post_tags?.map((pt, i) => pt.tags && (
+                      <span key={i} className={`text-xs font-bold px-2 py-1 rounded-none shadow-sm ${pt.tags.type === 'people' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}>
+                        #{pt.tags.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
+
           </div>
         )}
 
