@@ -159,6 +159,21 @@ export default function Home() {
 
   const handleClose = () => setSelectedIndex(null);
 
+  // ★【追加】ギャラリーが開いている間、裏側の画面（body）のスクロールを禁止する魔法
+  useEffect(() => {
+    if (selectedIndex !== null) {
+      // ギャラリーが開いたとき、bodyのスクロールを殺す
+      document.body.style.overflow = 'hidden';
+    } else {
+      // ギャラリーが閉じたとき、bodyのスクロールを復活させる
+      document.body.style.overflow = '';
+    }
+    // クリーンアップ関数（コンポーネントが消えるときに念のため復活させる）
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [selectedIndex]); // selectedIndex が変わるたびに実行
+
   // PCでのキーボード操作（Esc, 矢印キー）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
